@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from PySide6.QtCore import QTimer
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QMessageBox
 
 from stem_hub_host.app import get_app
 from stem_hub_host.controller import Controller
 from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
+from stem_hub_host.ui.main_window import MainWindow
+
+
+class FailingOpenTransport(FakeSerialTransport):
+    def open(self, port_name: str, baudrate: int) -> bool:
+        return False
+
+    def error_string(self) -> str:
+        return "access denied"
 
 
 def _short_controller() -> tuple[
@@ -109,3 +119,62 @@ def test_fast_reconnect_ignores_old_connection_timers() -> None:
     assert controller.is_handshake_ok
     assert failures == []
     worker.close()
+
+
+def test_handshake_failure_is_offline_before_single_dialog(
+    monkeypatch,
+) -> None:
+    app = get_app()
+    _, worker, controller = _short_controller()
+    window = MainWindow(controller)
+    warnings: list[tuple[str, str]] = []
+
+    def record_warning(parent, title: str, text: str):
+        assert window.console_tab.serial_bar.status_badge.text() == "OFFLINE"
+        assert window.console_tab.serial_bar.connect_btn.text() == "CONNECT"
+        assert window.console_tab.serial_bar.port_combo.isEnabled()
+        warnings.append((title, text))
+        return QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(QMessageBox, "warning", record_warning)
+
+    assert worker.open("FAKE0", 115200)
+    QTest.qWait(280)
+
+    assert len(warnings) == 1
+    assert warnings[0][0] == "连接失败"
+    assert "5 秒" in warnings[0][1]
+    assert not worker.is_open()
+    window.close()
+    app.processEvents()
+
+
+def test_direct_open_failure_restores_offline_and_warns_once(
+    monkeypatch,
+) -> None:
+    app = get_app()
+    worker = SerialWorker(FailingOpenTransport())
+    controller = Controller(worker)
+    window = MainWindow(controller)
+    warnings: list[tuple[str, str]] = []
+
+    def record_warning(parent, title: str, text: str):
+        warnings.append((title, text))
+        return QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(QMessageBox, "warning", record_warning)
+
+    window._on_open_serial("COM_BAD", 115200)
+    app.processEvents()
+
+    bar = window.console_tab.serial_bar
+    assert bar.status_badge.text() == "OFFLINE"
+    assert bar.connect_btn.text() == "CONNECT"
+    assert bar.port_combo.isEnabled()
+    assert warnings == [
+        (
+            "连接失败",
+            "无法打开串口 COM_BAD。\n\n请检查端口是否被占用后重试。",
+        )
+    ]
+    window.close()

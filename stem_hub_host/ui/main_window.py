@@ -5,6 +5,7 @@ from PySide6.QtCore import QEvent, QSettings, QTimer, Qt
 from PySide6.QtWidgets import (
     QFrame,
     QMainWindow,
+    QMessageBox,
     QStatusBar,
     QTabWidget,
     QVBoxLayout,
@@ -273,7 +274,13 @@ class MainWindow(QMainWindow):
     # ---- 串口 ----
     def _on_open_serial(self, port: str, baud: int) -> None:
         if not self._controller.open(port, baud):
+            self.console_tab.serial_bar.set_disconnected()
             self.console_tab.at_console.append_error(f"Open failed: {port}")
+            QMessageBox.warning(
+                self,
+                "连接失败",
+                f"无法打开串口 {port}。\n\n请检查端口是否被占用后重试。",
+            )
 
     def _on_close_serial(self) -> None:
         self._controller.close()
@@ -314,8 +321,15 @@ class MainWindow(QMainWindow):
         )
 
     def _on_handshake_failed(self, reason: str) -> None:
-        self.console_tab.serial_bar.set_handshake_failed(reason)
         self._apply_handshake_gate(connected=False)
+        self.console_tab.at_console.append_error(f"连接失败: {reason}")
+        QMessageBox.warning(
+            self,
+            "连接失败",
+            "串口已打开，但未能在 5 秒内完成设备握手。\n"
+            f"原因：{reason}\n\n"
+            "请检查端口、波特率和下位机状态后重试。",
+        )
 
     def _on_toggle_changed(self, name: str, on: bool) -> None:
         c = self.console_tab.charge_card

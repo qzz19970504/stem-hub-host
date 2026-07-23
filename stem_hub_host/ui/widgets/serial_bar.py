@@ -201,7 +201,7 @@ class SerialBar(QWidget):
 
     def set_connected(self, port_name: str, baudrate: int) -> None:
         """已打开串口."""
-        self._set_connection_state(STATE_OPENING, "OPENING")
+        self._set_connection_state(STATE_OPENING, "CONNECTING")
         self.port_combo.setEnabled(False)
 
     def set_handshake_ok(self, version: str) -> None:

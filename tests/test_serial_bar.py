@@ -32,12 +32,12 @@ def test_disconnected_action_is_green_connect_state(serial_bar: SerialBar) -> No
     assert serial_bar.status_badge.text() == "OFFLINE"
 
 
-def test_open_port_action_is_red_disconnect_state(serial_bar: SerialBar) -> None:
+def test_open_port_action_is_red_connecting_state(serial_bar: SerialBar) -> None:
     serial_bar.set_connected("COM3", 115200)
 
     assert serial_bar.connect_btn.text() == "DISCONNECT"
     assert serial_bar.connect_btn.property("connectionState") == "opening"
-    assert serial_bar.status_badge.text() == "OPENING"
+    assert serial_bar.status_badge.text() == "CONNECTING"
 
 
 def test_handshake_action_stays_red_and_reports_connected(serial_bar: SerialBar) -> None:
