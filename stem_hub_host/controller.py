@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from decimal import Decimal
-from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -62,14 +61,29 @@ class Controller(QObject):
     passthrough_mode_changed = Signal(str)
     passthrough_transition_changed = Signal(bool)
 
-    def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        worker: SerialWorker,
+        parent: QObject | None = None,
+        *,
+        handshake_deadline_ms: int = 5000,
+        handshake_retry_ms: int = 1000,
+        handshake_attempt_timeout_ms: int = 500,
+        handshake_initial_delay_ms: int = 200,
+    ) -> None:
         super().__init__(parent)
         self._worker = worker
         self._data_buffer = DataBuffer()
+        self._handshake_deadline_ms = handshake_deadline_ms
+        self._handshake_retry_ms = handshake_retry_ms
+        self._handshake_attempt_timeout_ms = handshake_attempt_timeout_ms
+        self._handshake_initial_delay_ms = handshake_initial_delay_ms
 
         # 状态缓存
         self._is_open = False
         self._handshake_ok = False
+        self._connection_attempt_active = False
+        self._last_handshake_error = "TIMEOUT"
         self._sense_hz = DEFAULT_SENSE_HZ
         self._latest_sense = None
         self._latest_motor = None
@@ -108,7 +122,14 @@ class Controller(QObject):
         self._handshake_delay_timer = QTimer(self)
         self._handshake_delay_timer.setSingleShot(True)
         self._handshake_delay_timer.timeout.connect(self._do_handshake)
-        self._handshake_timer: Optional[QTimer] = None
+        self._handshake_retry_timer = QTimer(self)
+        self._handshake_retry_timer.setSingleShot(True)
+        self._handshake_retry_timer.timeout.connect(self._do_handshake)
+        self._handshake_deadline_timer = QTimer(self)
+        self._handshake_deadline_timer.setSingleShot(True)
+        self._handshake_deadline_timer.timeout.connect(
+            self._fail_connection_attempt
+        )
 
         # 连 worker 信号
         worker.connected.connect(self._on_worker_connected)
@@ -145,6 +166,8 @@ class Controller(QObject):
         return ok
 
     def close(self) -> None:
+        self._connection_attempt_active = False
+        self._cancel_handshake_timers()
         self._stop_polling()
         self._worker.close()
 
@@ -493,15 +516,18 @@ class Controller(QObject):
     def _on_worker_connected(self, port: str, baud: int) -> None:
         self._is_open = True
         self._handshake_ok = False
-        self._cancel_handshake_timer()
+        self._connection_attempt_active = True
+        self._last_handshake_error = "TIMEOUT"
+        self._cancel_handshake_timers()
+        self._handshake_deadline_timer.start(self._handshake_deadline_ms)
         self._start_handshake()
 
     def _on_worker_disconnected(self) -> None:
         self._is_open = False
         self._handshake_ok = False
+        self._connection_attempt_active = False
         self._stop_polling()
-        self._handshake_delay_timer.stop()
-        self._cancel_handshake_timer()
+        self._cancel_handshake_timers()
         self._latest_sense = None
         self._latest_motor = None
         self._confirmed_motor_mode = None
@@ -571,10 +597,7 @@ class Controller(QObject):
                 self._confirmed_motor_mode = requested_mode
 
         if stripped_cmd.startswith("AT+VERSION?") and resp.version is not None:
-            self._handshake_ok = True
-            self._cancel_handshake_timer()
-            # 启动周期拉取
-            self._start_polling()
+            self._complete_handshake()
             return
 
     def _on_at_data(self, cmd: str, resp) -> None:
@@ -590,44 +613,62 @@ class Controller(QObject):
     # ---- 握手 ----
     def _start_handshake(self) -> None:
         # Restarting this timer cancels a stale handshake from a prior port.
-        self._handshake_delay_timer.start(200)
+        self._handshake_delay_timer.start(self._handshake_initial_delay_ms)
 
     def _do_handshake(self) -> None:
-        if not self._is_open:
+        if not self._is_open or not self._connection_attempt_active:
             return
         try:
-            # 同步等, 最多 500ms
-            resp = self._worker.send_and_wait(cmd_handshake(), timeout_ms=500)
+            resp = self._worker.send_and_wait(
+                cmd_handshake(),
+                timeout_ms=self._handshake_attempt_timeout_ms,
+            )
+            if not self._connection_attempt_active:
+                return
             if resp.version is not None:
-                self._handshake_ok = True
-                self._start_polling()
+                self._complete_handshake()
             else:
                 reason = (
                     resp.error.code
                     if resp.error is not None
                     else "INVALID_VERSION"
                 )
-                self.handshake_failed.emit(reason)
-                self._schedule_handshake_retry()
+                self._schedule_handshake_retry(reason)
         except SerialTimeout:
-            self._on_worker_error("握手超时，2 秒后重试")
-            self.handshake_failed.emit("TIMEOUT")
-            self._schedule_handshake_retry()
+            if self._connection_attempt_active:
+                self._schedule_handshake_retry("TIMEOUT")
         except SerialError as e:
-            self._on_worker_error(f"握手失败: {e}")
-            self.handshake_failed.emit(str(e))
-            if self._is_open:
-                self._schedule_handshake_retry()
+            if self._connection_attempt_active and self._is_open:
+                self._schedule_handshake_retry(str(e))
 
-    def _schedule_handshake_retry(self) -> None:
-        if self._handshake_timer is None:
-            self._handshake_timer = QTimer(self)
-            self._handshake_timer.timeout.connect(self._do_handshake)
-        self._handshake_timer.start(2000)  # 2s 重试
+    def _schedule_handshake_retry(self, reason: str) -> None:
+        if not self._connection_attempt_active or not self._is_open:
+            return
+        self._last_handshake_error = reason
+        self._handshake_retry_timer.start(self._handshake_retry_ms)
 
-    def _cancel_handshake_timer(self) -> None:
-        if self._handshake_timer is not None:
-            self._handshake_timer.stop()
+    def _complete_handshake(self) -> None:
+        if self._handshake_ok:
+            return
+        self._connection_attempt_active = False
+        self._handshake_ok = True
+        self._cancel_handshake_timers()
+        self._start_polling()
+
+    def _fail_connection_attempt(self) -> None:
+        if not self._connection_attempt_active:
+            return
+        reason = self._last_handshake_error
+        self._connection_attempt_active = False
+        self._cancel_handshake_timers()
+        if self._worker.is_open():
+            self._worker.close()
+        self.handshake_failed.emit(reason)
+
+    def _cancel_handshake_timers(self) -> None:
+        self._handshake_delay_timer.stop()
+        self._handshake_retry_timer.stop()
+        self._handshake_deadline_timer.stop()
 
     # ---- UI 拉取最新状态 ----
     def get_latest(self):

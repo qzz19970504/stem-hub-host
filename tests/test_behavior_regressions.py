@@ -425,24 +425,33 @@ def test_fast_reconnect_cancels_stale_delayed_handshake() -> None:
     assert controller.is_handshake_ok
 
 
-def test_rejected_handshake_enters_error_state_and_retries() -> None:
-    app = _app()
+def test_rejected_handshake_stops_at_connection_deadline() -> None:
+    _app()
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
-    controller = Controller(worker)
-    window = MainWindow(controller)
+    controller = Controller(
+        worker,
+        handshake_deadline_ms=120,
+        handshake_retry_ms=20,
+        handshake_attempt_timeout_ms=15,
+        handshake_initial_delay_ms=0,
+    )
+    failures: list[str] = []
+    controller.handshake_failed.connect(failures.append)
 
     assert worker.open("FAKE0", 115200)
-    QTimer.singleShot(240, lambda: transport.feed(b"ERROR:PARSE\r\n"))
-    QTest.qWait(320)
+    QTimer.singleShot(5, lambda: transport.feed(b"ERROR:PARSE\r\n"))
+    QTest.qWait(60)
 
     assert not controller.is_handshake_ok
-    assert window.console_tab.serial_bar.status_badge.text() == "ERROR"
-    assert controller._handshake_timer is not None
-    assert controller._handshake_timer.isActive()
-    window.close()
-    worker.close()
-    app.processEvents()
+    assert worker.is_open()
+    assert failures == []
+
+    QTest.qWait(100)
+
+    assert not worker.is_open()
+    assert failures == ["TIMEOUT"]
+    assert not controller._handshake_retry_timer.isActive()
 
 
 def test_rejected_motor_command_restores_last_confirmed_mode() -> None:
