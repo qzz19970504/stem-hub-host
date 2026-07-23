@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
+from decimal import Decimal
 from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -30,6 +31,22 @@ from .at_protocol import (
 )
 from .data_buffer import DataBuffer
 from .serial_worker import SerialError, SerialTimeout, SerialWorker
+
+
+SENSE_HZ_OPTIONS = (0.2, 0.4, 0.6, 0.8, 1.0)
+DEFAULT_SENSE_HZ = 1.0
+
+
+def normalize_sense_hz(hz: float) -> float:
+    """Return the nearest supported rate, preferring the higher midpoint."""
+
+    value = Decimal(str(hz))
+    decimal_options = tuple(Decimal(str(option)) for option in SENSE_HZ_OPTIONS)
+    normalized = min(
+        decimal_options,
+        key=lambda option: (abs(option - value), -option),
+    )
+    return float(normalized)
 
 
 class Controller(QObject):
@@ -53,7 +70,7 @@ class Controller(QObject):
         # 状态缓存
         self._is_open = False
         self._handshake_ok = False
-        self._sense_hz = 2.0  # 默认 2 Hz
+        self._sense_hz = DEFAULT_SENSE_HZ
         self._latest_sense = None
         self._latest_motor = None
         self._confirmed_motor_mode: str | None = None
@@ -119,11 +136,9 @@ class Controller(QObject):
         return self._sense_hz
 
     def set_sense_hz(self, hz: float) -> None:
-        if hz <= 0:
-            return
-        self._sense_hz = hz
+        self._sense_hz = normalize_sense_hz(hz)
         self._apply_sense_interval()
-        self.sense_request_hz_changed.emit(hz)
+        self.sense_request_hz_changed.emit(self._sense_hz)
 
     def open(self, port: str, baud: int = 115200) -> bool:
         ok = self._worker.open(port, baud)
@@ -135,7 +150,7 @@ class Controller(QObject):
 
     # ---- 周期拉取 ----
     def _apply_sense_interval(self) -> None:
-        ms = max(50, int(1000 / self._sense_hz))
+        ms = round(1000 / self._sense_hz)
         self._sense_timer.setInterval(ms)
 
     def _start_polling(self) -> None:

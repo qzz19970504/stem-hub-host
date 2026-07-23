@@ -139,6 +139,9 @@ class MainWindow(QMainWindow):
         self._ui_timer.start(100)
 
         self.plot_tab.hz_spin.valueChanged.connect(self._controller.set_sense_hz)
+        self._controller.sense_request_hz_changed.connect(
+            self.plot_tab.set_sample_rate
+        )
         self.passthrough_tab.panel.bridge_changed.connect(self._controller.set_passthrough)
         self.passthrough_tab.panel.tx_requested.connect(self._on_passthrough_tx)
 

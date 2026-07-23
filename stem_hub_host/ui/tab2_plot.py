@@ -49,9 +49,10 @@ class PlotTab(QWidget):
         self.hz_spin = QDoubleSpinBox()
         self.hz_spin.setObjectName("sampleRateControl")
         self.hz_spin.setFixedWidth(140)
-        self.hz_spin.setRange(0.1, 20.0)
-        self.hz_spin.setSingleStep(0.5)
-        self.hz_spin.setValue(2.0)
+        self.hz_spin.setDecimals(1)
+        self.hz_spin.setRange(0.2, 1.0)
+        self.hz_spin.setSingleStep(0.2)
+        self.hz_spin.setValue(1.0)
         self.hz_spin.setSuffix(" Hz")
         toolbar.addWidget(self.hz_spin)
 
@@ -67,3 +68,10 @@ class PlotTab(QWidget):
 
         # 信号
         self.clear_btn.clicked.connect(self.plot_widget.reset)
+
+    def set_sample_rate(self, hz: float) -> None:
+        """Reflect the Controller-normalized sampling rate without recursion."""
+
+        self.hz_spin.blockSignals(True)
+        self.hz_spin.setValue(hz)
+        self.hz_spin.blockSignals(False)
