@@ -3,7 +3,7 @@
 STM32 `stem-hub` 固件的 Qt Python 上位机（PySide6）。功能详见固件仓的
 [上位机AT命令文档](../stem-hub/上位机AT命令文档.md)。
 
-## 功能（规划中）
+## 功能
 
 - **控制台 (Tab 1)**：电池电量 / 温度 / NTC 框图，充放电模式切换，电机驱动状态 + 控制，NMOS1/2 与 MP4317/LM51770 开关，nFAULT/nFLT 状态，AT 指令输入框
 - **实时图表 (Tab 2)**：可调频率（默认 2 Hz）拉取 `AT+SENSE?` 滚动绘图，可选显示哪些量
@@ -61,9 +61,23 @@ stem-hub-host/
 - 周期查询：`AT+SENSE?` 返回 `+SENSE:...` + `OK`
 - 控制命令单条发完等回包
 
-## 状态
+## 视觉回归
 
-🚧 **早期开发中**。当前只搭好工程骨架，能弹个空窗。
+界面颜色、圆角、间距、控制高度、描边、辉光和动画时长集中定义在
+`stem_hub_host/ui/theme.py`，`style.qss` 通过具名令牌渲染。视觉审计覆盖
+Dark/Light、三个页面、固定 1600×900、1920×1080 全屏审计视图，以及
+Console 的连接/断开状态，共 16 张黄金截图。
+
+```powershell
+# 普通检查：只生成临时截图并与黄金基线比较，不会覆盖基线
+& 'env\release\Scripts\python.exe' tools\check_visual_regression.py
+
+# 仅在已人工确认视觉变化时，显式更新黄金基线
+& 'env\release\Scripts\python.exe' tools\update_visual_baselines.py
+```
+
+默认阈值为平均 RGB 绝对差不超过 `3/255`，且任一通道差值大于 12 的
+像素占比不超过 1%。黄金图片与清单位于 `tests/golden/visual/`。
 
 ## 精简发布包
 

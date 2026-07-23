@@ -1,0 +1,205 @@
+{
+  "tool_version": 1,
+  "fixed_view_size": [
+    1600,
+    900
+  ],
+  "fullscreen_audit_size": [
+    1920,
+    1080
+  ],
+  "captures": [
+    {
+      "id": "dark:fixed:console:connected",
+      "file": "dark/fixed-console-connected.png",
+      "sha256": "59538a948a87dbb02ff3693346ee673b5b7d959c2724d4ad25a76f220d9fc94a",
+      "width": 1600,
+      "height": 900,
+      "theme": "dark",
+      "page": "console",
+      "state": "connected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fixed:charts:connected",
+      "file": "dark/fixed-charts-connected.png",
+      "sha256": "223674faeac9a3d64da375a96a0e8a61fc9c1da07128aed890e8152a6f82edab",
+      "width": 1600,
+      "height": 900,
+      "theme": "dark",
+      "page": "charts",
+      "state": "connected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fixed:passthrough:connected",
+      "file": "dark/fixed-passthrough-connected.png",
+      "sha256": "caab23e012b5c3a6588934509cc727a2b8137fd70d6ddeb6effcdca261990521",
+      "width": 1600,
+      "height": 900,
+      "theme": "dark",
+      "page": "passthrough",
+      "state": "connected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fixed:console:disconnected",
+      "file": "dark/fixed-console-disconnected.png",
+      "sha256": "d15141de0772c3f0fe355807e48d9e90a38ccba8e75eebcff7e88a0501a9add0",
+      "width": 1600,
+      "height": 900,
+      "theme": "dark",
+      "page": "console",
+      "state": "disconnected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fullscreen:console:connected",
+      "file": "dark/fullscreen-console-connected.png",
+      "sha256": "6141faa109d28ed9382dcdaaab53bdeedd4238742dc4f75fc993a4e6072160f0",
+      "width": 1920,
+      "height": 1080,
+      "theme": "dark",
+      "page": "console",
+      "state": "connected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fullscreen:charts:connected",
+      "file": "dark/fullscreen-charts-connected.png",
+      "sha256": "4bd3ab4aa404b5a46ef33edd9f63458d0858927e517b79c8fce62db2be2fbef0",
+      "width": 1920,
+      "height": 1080,
+      "theme": "dark",
+      "page": "charts",
+      "state": "connected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fullscreen:passthrough:connected",
+      "file": "dark/fullscreen-passthrough-connected.png",
+      "sha256": "9aad76d160c2a5fcfc15f5804b8a1f2da942d759b2354e43e5d832bce7ebcfd6",
+      "width": 1920,
+      "height": 1080,
+      "theme": "dark",
+      "page": "passthrough",
+      "state": "connected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "dark:fullscreen:console:disconnected",
+      "file": "dark/fullscreen-console-disconnected.png",
+      "sha256": "18ac5ec7e321227cf30e3713a83a1832cb271ad662ed33b85697e01eae225ff6",
+      "width": 1920,
+      "height": 1080,
+      "theme": "dark",
+      "page": "console",
+      "state": "disconnected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fixed:console:connected",
+      "file": "light/fixed-console-connected.png",
+      "sha256": "9398eee3778a3c81c2768794df545a31fdef6e7e4dc6f3f746fafedfbd32a64c",
+      "width": 1600,
+      "height": 900,
+      "theme": "light",
+      "page": "console",
+      "state": "connected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fixed:charts:connected",
+      "file": "light/fixed-charts-connected.png",
+      "sha256": "f5bafc80989e9184501c1f63076994f36b1c158708fbd0177f3178d3b35d5d7b",
+      "width": 1600,
+      "height": 900,
+      "theme": "light",
+      "page": "charts",
+      "state": "connected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fixed:passthrough:connected",
+      "file": "light/fixed-passthrough-connected.png",
+      "sha256": "9f8b10d4b9e27d59e40a14a9e5399b5bfc354c5ac2eea7ad7406ac0454cbb1b2",
+      "width": 1600,
+      "height": 900,
+      "theme": "light",
+      "page": "passthrough",
+      "state": "connected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fixed:console:disconnected",
+      "file": "light/fixed-console-disconnected.png",
+      "sha256": "4f86f2394259b6bcdce543de9eeeec25a520ee68ba570af120863cc5439583b2",
+      "width": 1600,
+      "height": 900,
+      "theme": "light",
+      "page": "console",
+      "state": "disconnected",
+      "view": "fixed",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fullscreen:console:connected",
+      "file": "light/fullscreen-console-connected.png",
+      "sha256": "a991d0aaf8d1ddcb0b6bcc921598a9bdddee4f2d0e754831c150af4e56cd240b",
+      "width": 1920,
+      "height": 1080,
+      "theme": "light",
+      "page": "console",
+      "state": "connected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fullscreen:charts:connected",
+      "file": "light/fullscreen-charts-connected.png",
+      "sha256": "35ad09983cc02a94d9393721837e45969c4062d93699cfedea6beaccfdc488f2",
+      "width": 1920,
+      "height": 1080,
+      "theme": "light",
+      "page": "charts",
+      "state": "connected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fullscreen:passthrough:connected",
+      "file": "light/fullscreen-passthrough-connected.png",
+      "sha256": "d3025ade147ee1ec967b07f5b674b178d2a8f7923a94d83fbeccd9fa763cd2a2",
+      "width": 1920,
+      "height": 1080,
+      "theme": "light",
+      "page": "passthrough",
+      "state": "connected",
+      "view": "fullscreen",
+      "tool_version": 1
+    },
+    {
+      "id": "light:fullscreen:console:disconnected",
+      "file": "light/fullscreen-console-disconnected.png",
+      "sha256": "803b25e95c704bdb7dbdc0e98070d0c6cc01a79d78feee2ca654f6f20291b826",
+      "width": 1920,
+      "height": 1080,
+      "theme": "light",
+      "page": "console",
+      "state": "disconnected",
+      "view": "fullscreen",
+      "tool_version": 1
+    }
+  ]
+}
