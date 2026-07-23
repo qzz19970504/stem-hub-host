@@ -24,7 +24,7 @@
     {
       "id": "dark:fixed:charts:connected",
       "file": "dark/fixed-charts-connected.png",
-      "sha256": "223674faeac9a3d64da375a96a0e8a61fc9c1da07128aed890e8152a6f82edab",
+      "sha256": "5d1272176aee0d0e3572986b0ec60bce9e1be8a257e5bf903dfc8befa98b6237",
       "width": 1600,
       "height": 900,
       "theme": "dark",
@@ -72,7 +72,7 @@
     {
       "id": "dark:fullscreen:charts:connected",
       "file": "dark/fullscreen-charts-connected.png",
-      "sha256": "4bd3ab4aa404b5a46ef33edd9f63458d0858927e517b79c8fce62db2be2fbef0",
+      "sha256": "6b76e825476aaaa562c0bea577866a038ce6801e8a37cec8ef5eacd76d91e68d",
       "width": 1920,
       "height": 1080,
       "theme": "dark",
@@ -120,7 +120,7 @@
     {
       "id": "light:fixed:charts:connected",
       "file": "light/fixed-charts-connected.png",
-      "sha256": "f5bafc80989e9184501c1f63076994f36b1c158708fbd0177f3178d3b35d5d7b",
+      "sha256": "596f633b45f8ca1195d2232b8eb6b15dd26c92f9393274d05b8619e30d1c3afb",
       "width": 1600,
       "height": 900,
       "theme": "light",
@@ -168,7 +168,7 @@
     {
       "id": "light:fullscreen:charts:connected",
       "file": "light/fullscreen-charts-connected.png",
-      "sha256": "35ad09983cc02a94d9393721837e45969c4062d93699cfedea6beaccfdc488f2",
+      "sha256": "62763af05e8314bea38318914a7c6f289076d9d7ca6d2c1ea5c56df7717ef8a8",
       "width": 1920,
       "height": 1080,
       "theme": "light",
