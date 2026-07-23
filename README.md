@@ -22,6 +22,30 @@ pip install -i https://pypi.tuna.tsinghua.edu.cn/simple PySide6 PySide6-Addons
 python -m stem_hub_host.main
 ```
 
+## 无硬件联调
+
+没有串口或下位机时，使用内置 fake firmware 启动完整、可操作的界面：
+
+```powershell
+# 从保留的发布环境启动源码
+& 'env\release\Scripts\python.exe' -m stem_hub_host.main --fake
+
+# 打包后启动
+& 'dist\stem-hub-host.exe' --fake
+```
+
+fake 模式会自动创建并打开 `FAKE0`，模拟版本握手、遥测、输出控制和
+电机响应，适合直接观察 UI 与操作效果。
+
+也可以只运行连接相关的自动测试：
+
+```powershell
+& 'env\release\Scripts\python.exe' -m pytest tests\test_connection_flow.py -q
+```
+
+`pytest` 会自动创建并关闭测试窗口，只给出通过/失败结果，不是持续可
+操作的界面预览；想实际点击测试时应使用 `--fake`。
+
 ## 项目结构
 
 ```
