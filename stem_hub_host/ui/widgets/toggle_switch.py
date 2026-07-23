@@ -21,10 +21,10 @@ class ToggleSwitch(QWidget):
 
     toggled = Signal(bool)
 
-    TRACK_INSET = 2
-    TRACK_HEIGHT = 32
-    KNOB_SIZE = 28
-    KNOB_GAP = 2
+    TRACK_WIDTH = theme.SWITCH_WIDTH
+    TRACK_HEIGHT = theme.SWITCH_HEIGHT
+    KNOB_SIZE = theme.SWITCH_KNOB_SIZE
+    KNOB_GAP = theme.SWITCH_KNOB_GAP
     RENDER_SCALE = 4
 
     def __init__(
@@ -35,7 +35,7 @@ class ToggleSwitch(QWidget):
     ) -> None:
         super().__init__(parent)
         self._on = bool(initial)
-        self.setFixedSize(74, 36)
+        self.setFixedSize(self.TRACK_WIDTH, self.TRACK_HEIGHT)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
@@ -61,12 +61,9 @@ class ToggleSwitch(QWidget):
     def _target_x(self) -> float:
         if self._on:
             return float(
-                self.width()
-                - self.TRACK_INSET
-                - self.KNOB_GAP
-                - self.KNOB_SIZE
+                self.TRACK_WIDTH - self.KNOB_GAP - self.KNOB_SIZE
             )
-        return float(self.TRACK_INSET + self.KNOB_GAP)
+        return float(self.KNOB_GAP)
 
     def _animate_to(self, x: float) -> None:
         if self._anim is not None:
@@ -165,10 +162,10 @@ class ToggleSwitch(QWidget):
         painter.scale(scale, scale)
 
         track_rect = QRectF(
-            self.TRACK_INSET,
+            theme.SWITCH_BORDER_WIDTH / 2,
             (self.height() - self.TRACK_HEIGHT) / 2,
-            self.width() - self.TRACK_INSET * 2,
-            self.TRACK_HEIGHT,
+            self.TRACK_WIDTH - theme.SWITCH_BORDER_WIDTH,
+            self.TRACK_HEIGHT - theme.SWITCH_BORDER_WIDTH,
         )
         radius = self.TRACK_HEIGHT / 2
         track_fill, border = self._track_colors()
@@ -176,13 +173,16 @@ class ToggleSwitch(QWidget):
             border = QColor(theme.ACCENT_HOVER)
 
         painter.setBrush(track_fill)
-        painter.setPen(QPen(border, 1.0))
+        painter.setPen(QPen(border, theme.SWITCH_BORDER_WIDTH))
         painter.drawRoundedRect(track_rect, radius, radius)
 
         if self.hasFocus():
             focus_rect = track_rect.adjusted(1.5, 1.5, -1.5, -1.5)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(QColor(theme.FG_PRIMARY), 1.4))
+            painter.setPen(QPen(
+                QColor(theme.FG_PRIMARY),
+                theme.SWITCH_FOCUS_WIDTH,
+            ))
             painter.drawRoundedRect(
                 focus_rect,
                 radius - 1.5,
@@ -195,11 +195,14 @@ class ToggleSwitch(QWidget):
             knob_y + self.KNOB_SIZE / 2,
         )
         shadow = QColor(theme.SWITCH_SHADOW)
-        shadow.setAlpha(52)
+        shadow.setAlpha(theme.SWITCH_SHADOW_ALPHA)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(shadow)
         painter.drawEllipse(
-            QPointF(knob_center.x(), knob_center.y() + 1.2),
+            QPointF(
+                knob_center.x(),
+                knob_center.y() + theme.SWITCH_SHADOW_OFFSET_Y,
+            ),
             self.KNOB_SIZE / 2 + 0.8,
             self.KNOB_SIZE / 2 + 0.8,
         )

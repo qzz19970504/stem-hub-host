@@ -8,7 +8,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QPushButton
@@ -385,8 +385,51 @@ def test_motor_buttons_keep_stable_firmware_order(
 
 def test_toggle_switch_uses_supersampled_vector_rendering() -> None:
     assert ToggleSwitch.RENDER_SCALE >= 4
-    assert ToggleSwitch.TRACK_INSET >= 2
     assert ToggleSwitch.KNOB_SIZE < ToggleSwitch.TRACK_HEIGHT
+
+
+def test_toggle_switch_uses_balanced_dashboard_geometry() -> None:
+    toggle = ToggleSwitch()
+
+    assert toggle.size() == QSize(60, 36)
+    assert toggle.TRACK_WIDTH == 60
+    assert toggle.TRACK_HEIGHT == 36
+    assert toggle.KNOB_SIZE == 28
+    assert toggle.KNOB_GAP == 4
+    assert toggle.TRACK_WIDTH / toggle.TRACK_HEIGHT == pytest.approx(
+        1.667,
+        abs=0.001,
+    )
+
+
+@pytest.mark.parametrize("scheme", ["dark", "light"])
+@pytest.mark.parametrize("on", [False, True])
+def test_toggle_switch_knob_is_opaque_white(
+    qapp: QApplication,
+    scheme: str,
+    on: bool,
+) -> None:
+    try:
+        theme.set_color_scheme(scheme)
+        toggle = ToggleSwitch(initial=on)
+        toggle.show()
+        qapp.processEvents()
+
+        knob_center_x = round(toggle._knob_x + toggle.KNOB_SIZE / 2)
+        knob_center_y = toggle.height() // 2
+        pixel = toggle.grab().toImage().pixelColor(
+            knob_center_x,
+            knob_center_y,
+        )
+
+        assert pixel.alpha() == 255
+        assert pixel.red() >= 245
+        assert pixel.green() >= 245
+        assert pixel.blue() >= 245
+        toggle.deleteLater()
+        qapp.processEvents()
+    finally:
+        theme.set_color_scheme("dark")
 
 
 def test_toggle_switch_uses_a_flat_theme_track(qapp: QApplication) -> None:
@@ -396,12 +439,12 @@ def test_toggle_switch_uses_a_flat_theme_track(qapp: QApplication) -> None:
     qapp.processEvents()
 
     image = toggle.grab().toImage()
-    center_x = toggle.width() // 2
+    sample_x = toggle.KNOB_GAP + toggle.KNOB_SIZE // 2
     track_top = (toggle.height() - toggle.TRACK_HEIGHT) // 2
-    upper = image.pixelColor(center_x, track_top + 5)
+    upper = image.pixelColor(sample_x, track_top + 9)
     lower = image.pixelColor(
-        center_x,
-        track_top + toggle.TRACK_HEIGHT - 6,
+        sample_x,
+        track_top + toggle.TRACK_HEIGHT - 10,
     )
 
     assert abs(upper.red() - lower.red()) <= 2
