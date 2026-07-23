@@ -106,5 +106,20 @@ python tools/check_visual_regression.py
 python tools/update_visual_baselines.py
 ```
 
-发布前仍需依次通过全量测试、视觉审计、PyInstaller 构建和 `--fake`
-启动验证。发布虚拟环境 `env/release` 保留，不参与清理，可继续复用。
+## 6. 最终验证与发布产物
+
+在合并后的 `master` 上完成验证：
+
+- `pytest tests -q`：139 passed
+- `compileall`：通过
+- 视觉审计：16/16 通过，当前环境平均 RGB 差异均为 0
+- PyInstaller 6.21.0：构建成功
+- `--fake` 启动验证：运行 5 秒仍存活，通过
+- 发布文件：`dist/stem-hub-host.exe`
+- 文件大小：77,905,058 bytes（74.30 MiB）
+- SHA-256：
+  `97021194CA7954CEF4C310FA29933D3014A84D9D785B82091035AD855181BB71`
+
+构建清单包含 Rajdhani、JetBrains Mono（Regular/Bold）、Noto Sans SC
+四个字体文件以及 `style.qss`，未发现 MKL/TBB 文件。发布虚拟环境
+`env/release` 已保留，不参与清理，可继续复用。
