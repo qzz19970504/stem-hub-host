@@ -10,6 +10,7 @@ from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
 from stem_hub_host.ui.main_window import MainWindow
 from stem_hub_host.ui.tab2_plot import PlotTab
+from stem_hub_host.ui.widgets.plot_widget import PlotWidget
 
 
 def test_sample_rate_control_exposes_only_slow_range() -> None:
@@ -79,3 +80,19 @@ def test_main_window_reflects_normalized_rate_in_spin_box() -> None:
     assert window.plot_tab.hz_spin.value() == pytest.approx(0.4)
     window.close()
     worker.close()
+
+
+def test_plot_uses_real_elapsed_seconds_and_fixed_window() -> None:
+    get_app()
+    buffer = DataBuffer()
+    buffer.series["batt_v"].times.extend((10.0, 12.5, 17.0))
+    buffer.series["batt_v"].values.extend((36.0, 36.5, 37.0))
+    plot = PlotWidget(buffer)
+    plot.set_channels(("batt_v",))
+    plot.update_from_buffer()
+
+    x_values, _ = plot._curves["batt_v"].getData()
+    assert tuple(x_values) == pytest.approx((-7.0, -4.5, 0.0))
+    x_range = plot._plot.viewRange()[0]
+    assert x_range[0] == pytest.approx(-DataBuffer.WINDOW_SECONDS)
+    assert x_range[1] == pytest.approx(0.0)

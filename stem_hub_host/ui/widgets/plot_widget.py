@@ -85,6 +85,8 @@ class PlotWidget(QFrame):
         self._plot.showGrid(x=True, y=True, alpha=0.16)
         self._plot.setLabel("left", "VALUE")
         self._plot.setLabel("bottom", "TIME", units="s")
+        self._plot.disableAutoRange(axis="x")
+        self._apply_time_range()
         for axis_name in ("bottom", "left"):
             axis = self._plot.getAxis(axis_name)
             axis.setPen(pg.mkPen(theme.BORDER_LIGHT))
@@ -162,6 +164,16 @@ class PlotWidget(QFrame):
         # 时间归一化: 最新时间为 0, 之前的为负
         t_rel = t - t[-1]
         self._curves[name].setData(t_rel, v)
+        self._apply_time_range()
+
+    def _apply_time_range(self) -> None:
+        """Keep every sampling rate on the same real five-minute timebase."""
+
+        self._plot.setXRange(
+            -DataBuffer.WINDOW_SECONDS,
+            0.0,
+            padding=0,
+        )
 
     def reset(self) -> None:
         """清空数据 + 重画."""
