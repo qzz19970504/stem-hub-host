@@ -42,7 +42,10 @@ class ThermalGauge(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(44, 78)
+        self.setFixedSize(
+            theme.TEMP_GAUGE_WIDTH,
+            theme.TEMP_GAUGE_HEIGHT,
+        )
         self._celsius: Optional[float] = None
         self._level = 0.0
         self._color = theme.FG_TERTIARY
@@ -148,7 +151,7 @@ class ThermalGauge(QWidget):
             )
 
             surface = QColor(color)
-            surface.setAlpha(90)
+            surface.setAlpha(theme.EFFECT_GLOW_ALPHA)
             painter.setBrush(surface)
             painter.drawEllipse(
                 QPointF(inner.center().x(), fill_rect.top()),
@@ -192,8 +195,13 @@ class TempTile(QFrame):
         )
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 12, 14, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(
+            theme.LAYOUT_MARGIN_CARD,
+            theme.SP_SM,
+            theme.LAYOUT_MARGIN_CARD_Y,
+            theme.SP_SM,
+        )
+        layout.setSpacing(theme.SP_SM)
         layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         layout.addStretch(1)
 

@@ -305,8 +305,8 @@ class _ModeButton(QPushButton):
     """方形模式按钮 — 自绘图标 + 半透明未激活 / 高亮激活."""
 
     RENDER_SCALE = 3
-    inactive_surface_alpha = 72
-    active_surface_alpha = 218
+    inactive_surface_alpha = theme.MOTOR_INACTIVE_SURFACE_ALPHA
+    active_surface_alpha = theme.MOTOR_ACTIVE_SURFACE_ALPHA
 
     def __init__(self, key: str, surface_group: str, parent=None) -> None:
         super().__init__(parent)
@@ -421,7 +421,7 @@ class _ModeButton(QPushButton):
             bg_bottom.setAlpha(max(28, self.inactive_surface_alpha - 30))
             text_color = QColor(self._icon_off)
             border_color = QColor(group_color)
-            border_color.setAlpha(145)
+            border_color.setAlpha(theme.EFFECT_BORDER_ALPHA)
 
         if not self.isEnabled():
             bg_top = QColor(theme.BG_INPUT)
@@ -471,7 +471,7 @@ class _ModeButton(QPushButton):
 
         if self.isDown():
             overlay = QColor("#FFFFFF")
-            overlay.setAlpha(40)
+            overlay.setAlpha(theme.EFFECT_PRESSED_ALPHA)
             p.fillPath(path, overlay)
 
         if self.hasFocus():
@@ -518,11 +518,11 @@ class MotorCard(QFrame):
 
         divider = QFrame(self)
         divider.setObjectName("divider")
-        divider.setFixedHeight(1)
+        divider.setFixedHeight(theme.DIVIDER_HEIGHT)
         outer.addWidget(divider)
 
         row = QHBoxLayout()
-        row.setSpacing(10)
+        row.setSpacing(theme.LAYOUT_GAP_CONTROL)
         row.setContentsMargins(0, 0, 0, 0)
         outer.addLayout(row, 1)
 

@@ -150,7 +150,7 @@ class BatteryRing(QWidget):
         self._ratio_anim.setEndValue(0.0)
 
         self._glow_anim = QPropertyAnimation(self, b"glow_phase", self)
-        self._glow_anim.setDuration(1800)
+        self._glow_anim.setDuration(theme.BATTERY_GLOW_PULSE_MS)
         self._glow_anim.setStartValue(0.0)
         self._glow_anim.setKeyValueAt(0.5, 1.0)
         self._glow_anim.setEndValue(0.0)

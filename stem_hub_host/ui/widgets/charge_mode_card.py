@@ -49,7 +49,7 @@ class _ToggleCell(QWidget):
 def _make_divider() -> QFrame:
     f = QFrame()
     f.setObjectName("divider")
-    f.setFixedHeight(1)
+    f.setFixedHeight(theme.DIVIDER_HEIGHT)
     return f
 
 
@@ -63,8 +63,13 @@ class ChargeModeCard(QFrame):
         super().__init__(parent)
         self.setObjectName("card")
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(10)
+        outer.setContentsMargins(
+            theme.LAYOUT_MARGIN_CARD,
+            theme.LAYOUT_MARGIN_CARD_Y,
+            theme.LAYOUT_MARGIN_CARD,
+            theme.LAYOUT_MARGIN_CARD_Y,
+        )
+        outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
         self._cells: dict[str, _ToggleCell] = {}
         top_row = self._make_toggle_row(["CHARGE", "DISCHARGE"])
@@ -82,7 +87,7 @@ class ChargeModeCard(QFrame):
         self.all_off_button = QPushButton("ALL OFF")
         self.all_off_button.setObjectName("allOffButton")
         self.all_off_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.all_off_button.setFixedSize(112, 34)
+        self.all_off_button.setFixedSize(112, theme.CONTROL_HEIGHT_SM)
         all_off_font = QFont(theme.FONT_DISPLAY)
         all_off_font.setPointSize(11)
         all_off_font.setBold(True)
@@ -118,7 +123,7 @@ class ChargeModeCard(QFrame):
 
     def _make_toggle_row(self, names: list[str]) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setSpacing(10)
+        row.setSpacing(theme.LAYOUT_GAP_CONTROL)
         for name in names:
             cell = _ToggleCell(name, self)
             cell.toggle.toggled.connect(

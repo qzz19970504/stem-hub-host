@@ -117,7 +117,7 @@ class _DotLabel(QLabel):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
         halo = QColor(color)
-        halo.setAlpha(45)
+        halo.setAlpha(theme.EFFECT_HALO_ALPHA)
         p.setBrush(halo)
         p.drawEllipse(QPointF(13, self.height() / 2), 6.5, 6.5)
         p.setBrush(QColor(color))
