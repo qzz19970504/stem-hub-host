@@ -209,6 +209,58 @@ def test_charge_enable_waits_for_old_path_off_acknowledgement() -> None:
     ]
 
 
+def test_charge_mode_resets_target_before_enabling() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    assert worker.open("FAKE0", 115200)
+
+    controller.set_charge_mode("charge")
+    assert transport.get_written() == b"AT+MP4317=OFF\r\n"
+
+    transport.feed(b"OK\r\n")
+    assert transport.get_written().endswith(b"AT+LM51770=OFF\r\n")
+
+    transport.feed(b"OK\r\n")
+    assert transport.get_written().endswith(b"AT+LM51770=ON\r\n")
+
+    transport.feed(b"OK\r\n")
+    assert not controller._charge_transition_active
+
+
+def test_charge_mode_does_not_enable_after_target_reset_fails() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    assert worker.open("FAKE0", 115200)
+
+    controller.set_charge_mode("charge")
+    transport.feed(b"OK\r\n")
+    transport.feed(b"ERROR:OUTPUT_QUEUE\r\n")
+
+    assert b"AT+LM51770=ON\r\n" not in transport.get_written()
+    assert not controller._charge_transition_active
+
+
+def test_discharge_mode_resets_target_before_enabling() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    assert worker.open("FAKE0", 115200)
+
+    controller.set_charge_mode("discharge")
+    assert transport.get_written() == b"AT+LM51770=OFF\r\n"
+
+    transport.feed(b"OK\r\n")
+    assert transport.get_written().endswith(b"AT+MP4317=OFF\r\n")
+
+    transport.feed(b"OK\r\n")
+    assert transport.get_written().endswith(b"AT+MP4317=ON\r\n")
+
+    transport.feed(b"OK\r\n")
+    assert not controller._charge_transition_active
+
+
 def test_rapid_charge_mode_requests_are_serialized() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
@@ -220,17 +272,23 @@ def test_rapid_charge_mode_requests_are_serialized() -> None:
     assert transport.get_written() == b"AT+MP4317=OFF\r\n"
 
     transport.feed(b"OK\r\n")
+    assert transport.get_written().endswith(b"AT+LM51770=OFF\r\n")
+    transport.feed(b"OK\r\n")
     assert transport.get_written().endswith(b"AT+LM51770=ON\r\n")
     transport.feed(b"OK\r\n")
     assert transport.get_written().endswith(b"AT+LM51770=OFF\r\n")
+    transport.feed(b"OK\r\n")
+    assert transport.get_written().endswith(b"AT+MP4317=OFF\r\n")
     transport.feed(b"OK\r\n")
     assert transport.get_written().endswith(b"AT+MP4317=ON\r\n")
     transport.feed(b"OK\r\n")
 
     assert transport.get_written() == (
         b"AT+MP4317=OFF\r\n"
+        b"AT+LM51770=OFF\r\n"
         b"AT+LM51770=ON\r\n"
         b"AT+LM51770=OFF\r\n"
+        b"AT+MP4317=OFF\r\n"
         b"AT+MP4317=ON\r\n"
     )
 

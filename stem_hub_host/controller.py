@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -191,40 +191,22 @@ class Controller(QObject):
 
     def _run_charge_transition(self, mode: str) -> None:
         if mode == "charge":
-            self._send_output(
-                cmd_set_mp4317(False),
-                "DISCHARGE",
-                False,
-                on_success=lambda: self._send_output(
-                    cmd_set_lm51770(True),
-                    "CHARGE",
-                    True,
-                    on_success=self._finish_charge_transition,
-                    on_failure=lambda _reason: self._finish_charge_transition(),
-                    allow_charge_transition=True,
+            self._run_charge_steps(
+                (
+                    (cmd_set_mp4317(False), "DISCHARGE", False),
+                    (cmd_set_lm51770(False), "CHARGE", False),
+                    (cmd_set_lm51770(True), "CHARGE", True),
                 ),
-                on_failure=lambda reason: self._abort_charge_transition(
-                    "CHARGE", reason
-                ),
-                allow_charge_transition=True,
+                target="CHARGE",
             )
         elif mode == "discharge":
-            self._send_output(
-                cmd_set_lm51770(False),
-                "CHARGE",
-                False,
-                on_success=lambda: self._send_output(
-                    cmd_set_mp4317(True),
-                    "DISCHARGE",
-                    True,
-                    on_success=self._finish_charge_transition,
-                    on_failure=lambda _reason: self._finish_charge_transition(),
-                    allow_charge_transition=True,
+            self._run_charge_steps(
+                (
+                    (cmd_set_lm51770(False), "CHARGE", False),
+                    (cmd_set_mp4317(False), "DISCHARGE", False),
+                    (cmd_set_mp4317(True), "DISCHARGE", True),
                 ),
-                on_failure=lambda reason: self._abort_charge_transition(
-                    "DISCHARGE", reason
-                ),
-                allow_charge_transition=True,
+                target="DISCHARGE",
             )
         else:
             def send_mp_off() -> None:
@@ -245,6 +227,38 @@ class Controller(QObject):
                 on_failure=lambda _reason: send_mp_off(),
                 allow_charge_transition=True,
             )
+
+    def _run_charge_steps(
+        self,
+        steps: Sequence[tuple[str, str, bool]],
+        *,
+        target: str,
+    ) -> None:
+        """Run one mutually exclusive power-path sequence, one ACK at a time."""
+
+        def run_step(index: int) -> None:
+            if index >= len(steps):
+                self._finish_charge_transition()
+                return
+
+            command, control, on = steps[index]
+
+            def fail(reason: str) -> None:
+                if on:
+                    self._finish_charge_transition()
+                else:
+                    self._abort_charge_transition(target, reason)
+
+            self._send_output(
+                command,
+                control,
+                on,
+                on_success=lambda: run_step(index + 1),
+                on_failure=fail,
+                allow_charge_transition=True,
+            )
+
+        run_step(0)
 
     def _abort_charge_transition(self, target: str, reason: str) -> None:
         self.output_command_failed.emit(target, True, f"aborted: {reason}")
