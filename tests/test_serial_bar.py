@@ -48,20 +48,19 @@ def test_handshake_action_stays_red_and_reports_connected(serial_bar: SerialBar)
     assert serial_bar.status_badge.text() == "CONNECTED"
 
 
-def test_serial_status_and_action_controls_expose_semantic_dots(
+def test_only_status_badge_exposes_a_semantic_dot(
     serial_bar: SerialBar,
 ) -> None:
     serial_bar.set_handshake_ok("release-v2.1")
 
     assert serial_bar.status_badge.dot_color == "connected"
-    assert serial_bar.connect_btn.dot_color == "connected"
+    assert not hasattr(serial_bar.connect_btn, "dot_color")
 
     serial_bar.set_disconnected()
     assert serial_bar.status_badge.dot_color == "offline"
-    assert serial_bar.connect_btn.dot_color == "offline"
 
 
-def test_disconnect_action_has_room_for_dot_and_complete_label(
+def test_disconnect_action_has_room_for_complete_label(
     serial_bar: SerialBar,
 ) -> None:
-    assert serial_bar.connect_btn.width() >= 146
+    assert serial_bar.connect_btn.width() >= 132

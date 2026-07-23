@@ -195,7 +195,35 @@ def test_temperature_tiles_follow_the_matching_ntc_fields(
     qapp.processEvents()
 
 
-def test_inactive_motor_buttons_use_three_paired_surface_tints(
+def test_temperature_tiles_use_animated_thermal_gauges(
+    qapp: QApplication,
+) -> None:
+    grid = TempGridCard()
+
+    assert all(
+        hasattr(tile, "gauge")
+        for tile in (
+            grid.tile_batt,
+            grid.tile_ntc1,
+            grid.tile_ntc2,
+            grid.tile_ntc3,
+        )
+    )
+
+    grid.tile_batt.set_value(40.0, animate=False)
+    assert grid.tile_batt.gauge.celsius == 40.0
+    assert 0.45 <= grid.tile_batt.gauge.level <= 0.55
+
+    grid.tile_batt.set_value(100.0, animate=False)
+    assert grid.tile_batt.gauge.level == 1.0
+
+    grid.tile_batt.set_value(None, animate=False)
+    assert grid.tile_batt.gauge.level == 0.0
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_motor_buttons_are_evenly_distributed(
     qapp: QApplication,
 ) -> None:
     qapp.setStyleSheet(get_qss())
@@ -205,26 +233,43 @@ def test_inactive_motor_buttons_use_three_paired_surface_tints(
     card.show()
     qapp.processEvents()
 
-    samples = {}
-    for key in ("SLEEP", "WAKE", "FWD", "REV", "BRAKE", "STOP"):
+    ordered = [
+        card.buttons[key]
+        for key in ("SLEEP", "WAKE", "FWD", "REV", "BRAKE", "STOP")
+    ]
+    centers = [button.geometry().center().x() for button in ordered]
+    gaps = [
+        right_center - left_center
+        for left_center, right_center in zip(centers, centers[1:])
+    ]
+    widths = [button.width() for button in ordered]
+
+    assert max(gaps) - min(gaps) <= 2
+    assert max(widths) - min(widths) <= 1
+    card.deleteLater()
+    qapp.processEvents()
+
+
+def test_brake_and_stop_use_red_safety_surfaces(
+    qapp: QApplication,
+) -> None:
+    qapp.setStyleSheet(get_qss())
+    card = MotorCard()
+    card.set_enabled(True)
+    card.setFixedSize(650, 410)
+    card.show()
+    qapp.processEvents()
+
+    for key in ("BRAKE", "STOP"):
         button = card.buttons[key]
         image = button.grab().toImage()
-        square_top = (button.height() - min(button.width(), button.height())) // 2
-        samples[key] = image.pixelColor(button.width() // 2, square_top + 8)
+        side = min(button.width(), button.height()) - 8
+        left = (button.width() - side) // 2
+        top = (button.height() - side) // 2
+        surface = image.pixelColor(left + 12, top + 12)
+        assert surface.red() >= surface.green() + 10
+        assert surface.red() >= surface.blue() + 8
 
-    def distance(left: str, right: str) -> int:
-        a, b = samples[left], samples[right]
-        return (
-            abs(a.red() - b.red())
-            + abs(a.green() - b.green())
-            + abs(a.blue() - b.blue())
-        )
-
-    assert distance("SLEEP", "WAKE") <= 10
-    assert distance("FWD", "REV") <= 10
-    assert distance("BRAKE", "STOP") <= 10
-    assert distance("SLEEP", "FWD") >= 12
-    assert distance("FWD", "BRAKE") >= 12
     card.deleteLater()
     qapp.processEvents()
 
@@ -317,15 +362,18 @@ def test_motor_mode_has_glow_and_buttons_use_translucent_surfaces(
     qapp.processEvents()
 
 
-def test_motor_buttons_are_arranged_as_three_semantic_pairs(
+def test_motor_buttons_keep_stable_firmware_order(
     qapp: QApplication,
 ) -> None:
     card = MotorCard()
 
-    assert card.button_pairs == (
-        ("SLEEP", "WAKE"),
-        ("FWD", "REV"),
-        ("BRAKE", "STOP"),
+    assert card.button_order == (
+        "SLEEP",
+        "WAKE",
+        "FWD",
+        "REV",
+        "BRAKE",
+        "STOP",
     )
     assert card.buttons["SLEEP"].surface_group == "idle"
     assert card.buttons["FWD"].surface_group == "motion"
@@ -339,3 +387,26 @@ def test_toggle_switch_uses_supersampled_vector_rendering() -> None:
     assert ToggleSwitch.RENDER_SCALE >= 4
     assert ToggleSwitch.TRACK_INSET >= 2
     assert ToggleSwitch.KNOB_SIZE < ToggleSwitch.TRACK_HEIGHT
+
+
+def test_toggle_switch_uses_a_flat_theme_track(qapp: QApplication) -> None:
+    toggle = ToggleSwitch()
+    toggle.set_on(True, animate=False)
+    toggle.show()
+    qapp.processEvents()
+
+    image = toggle.grab().toImage()
+    center_x = toggle.width() // 2
+    track_top = (toggle.height() - toggle.TRACK_HEIGHT) // 2
+    upper = image.pixelColor(center_x, track_top + 5)
+    lower = image.pixelColor(
+        center_x,
+        track_top + toggle.TRACK_HEIGHT - 6,
+    )
+
+    assert abs(upper.red() - lower.red()) <= 2
+    assert abs(upper.green() - lower.green()) <= 2
+    assert abs(upper.blue() - lower.blue()) <= 2
+    assert QColor(theme.ACCENT).hue() == upper.hue()
+    toggle.deleteLater()
+    qapp.processEvents()

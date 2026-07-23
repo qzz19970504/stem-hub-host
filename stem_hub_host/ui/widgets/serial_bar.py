@@ -124,33 +124,6 @@ class _DotLabel(QLabel):
         p.drawEllipse(QPointF(13, self.height() / 2), 3.5, 3.5)
 
 
-class _DotActionButton(QPushButton):
-    def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
-        self.dot_color = STATE_OFFLINE
-
-    def set_dot_state(self, state: str) -> None:
-        self.dot_color = state
-        self.update()
-
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        super().paintEvent(event)
-        color = (
-            theme.BG_BASE
-            if self.dot_color == STATE_OFFLINE
-            else "#FFFFFF"
-        )
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(Qt.PenStyle.NoPen)
-        halo = QColor(color)
-        halo.setAlpha(45)
-        p.setBrush(halo)
-        p.drawEllipse(QPointF(15, self.height() / 2), 6.0, 6.0)
-        p.setBrush(QColor(color))
-        p.drawEllipse(QPointF(15, self.height() / 2), 3.2, 3.2)
-
-
 class SerialBar(QWidget):
     """Top serial bar with explicit connection state semantics."""
 
@@ -192,7 +165,7 @@ class SerialBar(QWidget):
         self.status_badge.setFont(badge_font)
         lay.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.connect_btn = _DotActionButton("CONNECT")
+        self.connect_btn = QPushButton("CONNECT")
         self.connect_btn.setObjectName("connectBtn")
         self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.connect_btn.setFixedSize(
@@ -253,7 +226,6 @@ class SerialBar(QWidget):
         self.status_badge.setText(label)
         self.status_badge.setProperty("connectionState", state)
         self.status_badge.set_dot_state(state)
-        self.connect_btn.set_dot_state(state)
 
         for widget in (self.connect_btn, self.status_badge):
             widget.style().unpolish(widget)

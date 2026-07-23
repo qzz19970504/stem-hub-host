@@ -1,10 +1,24 @@
-"""TempGridCard — 第四轮: 改进图标 + 完美对齐."""
+"""Animated 2×2 temperature sensor card."""
 from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen
+from PySide6.QtCore import (
+    Property,
+    QEasingCurve,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    Qt,
+)
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QImage,
+    QLinearGradient,
+    QPainter,
+    QPen,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -19,21 +33,76 @@ from .. import theme
 from .battery_card import parse_celsius
 
 
-class ThermometerIcon(QWidget):
-    """Clean circular sensor glyph with a minimal thermometer silhouette."""
+class ThermalGauge(QWidget):
+    """Compact vertical gauge whose fill follows the sensor value."""
 
     RENDER_SCALE = 3
+    MIN_CELSIUS = -20.0
+    MAX_CELSIUS = 100.0
 
-    def __init__(self, size: int = 46, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(size, size)
-        self._color = theme.ACCENT
+        self.setFixedSize(44, 78)
+        self._celsius: Optional[float] = None
+        self._level = 0.0
+        self._color = theme.FG_TERTIARY
+        self._animation: QPropertyAnimation | None = None
 
-    def set_color(self, c: str) -> None:
-        self._color = c
+    @property
+    def celsius(self) -> Optional[float]:
+        return self._celsius
+
+    def _get_level(self) -> float:
+        return self._level
+
+    def _set_level(self, level: float) -> None:
+        self._level = max(0.0, min(1.0, float(level)))
         self.update()
 
-    def paintEvent(self, _ev) -> None:
+    level = Property(float, _get_level, _set_level)
+
+    def set_value(
+        self,
+        celsius: Optional[float],
+        *,
+        animate: bool = True,
+    ) -> None:
+        self._celsius = celsius
+        self._color = (
+            theme.temp_color(celsius)
+            if celsius is not None
+            else theme.FG_TERTIARY
+        )
+        target = 0.0
+        if celsius is not None:
+            target = (
+                float(celsius) - self.MIN_CELSIUS
+            ) / (self.MAX_CELSIUS - self.MIN_CELSIUS)
+            target = max(0.0, min(1.0, target))
+
+        if self._animation is not None:
+            self._animation.stop()
+        if not animate:
+            self._set_level(target)
+            return
+
+        animation = QPropertyAnimation(self, b"level", self)
+        animation.setDuration(theme.ANIMATION_NORMAL_MS)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.setStartValue(self._level)
+        animation.setEndValue(target)
+        animation.start()
+        self._animation = animation
+
+    def refresh_theme(self) -> None:
+        self._color = (
+            theme.temp_color(self._celsius)
+            if self._celsius is not None
+            else theme.FG_TERTIARY
+        )
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # type: ignore[override]
         scale = self.RENDER_SCALE
         image = QImage(
             self.width() * scale,
@@ -41,64 +110,65 @@ class ThermometerIcon(QWidget):
             QImage.Format.Format_ARGB32_Premultiplied,
         )
         image.fill(Qt.GlobalColor.transparent)
-        p = QPainter(image)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.scale(scale, scale)
-        s = min(self.width(), self.height())
-        color = QColor(self._color)
-        center = QPointF(s / 2, s / 2)
-        halo = QColor(color)
-        halo.setAlpha(28)
-        outline = QColor(color)
-        outline.setAlpha(105)
-        p.setPen(QPen(outline, 1))
-        p.setBrush(halo)
-        p.drawEllipse(center, s * 0.44, s * 0.44)
 
-        pen_w = max(1.6, s * 0.055)
-        cx = s * 0.43
-        bulb_cy = s * 0.68
-        bulb_r = s * 0.105
-        stem = QRectF(
-            cx - s * 0.075,
-            s * 0.24,
-            s * 0.15,
-            s * 0.39,
-        )
-        p.setPen(QPen(
-            color,
-            pen_w,
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.scale(scale, scale)
+
+        track = QRectF(8, 4, 18, self.height() - 8)
+        radius = track.width() / 2
+        painter.setPen(QPen(QColor(theme.BORDER_LIGHT), 1.0))
+        painter.setBrush(QColor(theme.BG_INPUT))
+        painter.drawRoundedRect(track, radius, radius)
+
+        inner = track.adjusted(3, 3, -3, -3)
+        fill_height = inner.height() * self._level
+        if fill_height > 0.2:
+            fill_rect = QRectF(
+                inner.left(),
+                inner.bottom() - fill_height,
+                inner.width(),
+                fill_height,
+            )
+            gradient = QLinearGradient(
+                fill_rect.left(),
+                fill_rect.bottom(),
+                fill_rect.left(),
+                fill_rect.top(),
+            )
+            color = QColor(self._color)
+            gradient.setColorAt(0.0, color.darker(118))
+            gradient.setColorAt(1.0, color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(gradient)
+            painter.drawRoundedRect(
+                fill_rect,
+                inner.width() / 2,
+                inner.width() / 2,
+            )
+
+            surface = QColor(color)
+            surface.setAlpha(90)
+            painter.setBrush(surface)
+            painter.drawEllipse(
+                QPointF(inner.center().x(), fill_rect.top()),
+                inner.width() * 0.72,
+                inner.width() * 0.72,
+            )
+
+        painter.setPen(QPen(
+            QColor(theme.FG_TERTIARY),
+            1.0,
             Qt.PenStyle.SolidLine,
             Qt.PenCapStyle.RoundCap,
-            Qt.PenJoinStyle.RoundJoin,
         ))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(stem, stem.width() / 2, stem.width() / 2)
-        p.drawEllipse(QPointF(cx, bulb_cy), bulb_r, bulb_r)
-
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(color)
-        column_w = s * 0.045
-        p.drawRoundedRect(
-            QRectF(
-                cx - column_w / 2,
-                s * 0.42,
-                column_w,
-                bulb_cy - s * 0.42,
-            ),
-            column_w / 2,
-            column_w / 2,
-        )
-        p.drawEllipse(QPointF(cx, bulb_cy), bulb_r * 0.62, bulb_r * 0.62)
-
-        p.setPen(QPen(color, max(1.2, pen_w * 0.7), Qt.PenStyle.SolidLine,
-                      Qt.PenCapStyle.RoundCap))
-        for y, length in ((0.32, 0.10), (0.43, 0.07), (0.54, 0.10)):
-            p.drawLine(
-                QPointF(s * 0.62, s * y),
-                QPointF(s * (0.62 + length), s * y),
+        for ratio, length in ((0.25, 6), (0.5, 9), (0.75, 6)):
+            y = inner.bottom() - inner.height() * ratio
+            painter.drawLine(
+                QPointF(track.right() + 4, y),
+                QPointF(track.right() + 4 + length, y),
             )
-        p.end()
+        painter.end()
 
         target = QPainter(self)
         target.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -106,88 +176,99 @@ class ThermometerIcon(QWidget):
 
 
 class TempTile(QFrame):
-    """温度小卡 — 严格水平对齐."""
+    """One animated temperature reading."""
 
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._celsius: Optional[float] = None
         self.setObjectName("tempTile")
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
 
-        # 严格布局: 左 44px 图标 + 右 弹性文字栏
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(12, 14, 12, 14)
-        lay.setSpacing(12)
-        lay.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        lay.addStretch(1)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 12, 14, 12)
+        layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        layout.addStretch(1)
 
-        # 图标 (固定大小, 垂直居中)
-        self.icon = ThermometerIcon(size=42)
-        self.icon.setMinimumWidth(42)
-        self.icon.setMaximumWidth(42)
-        lay.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.gauge = ThermalGauge()
+        layout.addWidget(
+            self.gauge,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
 
-        # 文字栏 (弹性宽度, 垂直居中)
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        text_col.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        lay.addLayout(text_col)
+        text_column = QVBoxLayout()
+        text_column.setSpacing(2)
+        text_column.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(text_column)
 
-        # 大温度数值
         self.value_label = QLabel("--")
-        f_val = QFont(theme.FONT_MONO)
-        f_val.setPointSize(20)
-        f_val.setBold(True)
-        self.value_label.setFont(f_val)
-        self.value_label.setStyleSheet(
-            f"color: {theme.FG_PRIMARY}; background: transparent;"
+        value_font = QFont(theme.FONT_MONO)
+        value_font.setPointSize(20)
+        value_font.setBold(True)
+        self.value_label.setFont(value_font)
+        self.value_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft
+            | Qt.AlignmentFlag.AlignVCenter
         )
-        self.value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.value_label.setMinimumWidth(112)
-        text_col.addWidget(self.value_label)
+        text_column.addWidget(self.value_label)
 
-        # 标签
         self.title_label = QLabel(title)
-        f_lbl = QFont(theme.FONT_DISPLAY)
-        f_lbl.setPointSize(11)
-        f_lbl.setBold(True)
-        self.title_label.setFont(f_lbl)
-        self.title_label.setStyleSheet(
-            f"color: {theme.FG_SECONDARY}; background: transparent; "
-            f"border: none; letter-spacing: 1.8px;"
+        title_font = QFont(theme.FONT_DISPLAY)
+        title_font.setPointSize(11)
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
+        self.title_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft
+            | Qt.AlignmentFlag.AlignVCenter
         )
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        text_col.addWidget(self.title_label)
-        lay.addStretch(1)
+        text_column.addWidget(self.title_label)
+        layout.addStretch(1)
 
-        self.set_value(None)
+        self.set_value(None, animate=False)
 
-    def set_value(self, celsius: Optional[float]) -> None:
+    def set_value(
+        self,
+        celsius: Optional[float],
+        *,
+        animate: bool = True,
+    ) -> None:
         self._celsius = celsius
         if celsius is None:
             self.value_label.setText("--")
             self.value_label.setStyleSheet(
-                f"color: {theme.FG_TERTIARY}; background: transparent;"
+                f"color: {theme.FG_TERTIARY};"
+                " background: transparent;"
             )
-            self.icon.set_color(theme.FG_TERTIARY)
         else:
             self.value_label.setText(f"{celsius:.1f}°C")
-            color = theme.temp_color(celsius)
             self.value_label.setStyleSheet(
-                f"color: {theme.FG_PRIMARY}; background: transparent;"
+                f"color: {theme.FG_PRIMARY};"
+                " background: transparent;"
             )
-            self.icon.set_color(color)
+        self.gauge.set_value(celsius, animate=animate)
 
     def refresh_theme(self) -> None:
         self.title_label.setStyleSheet(
-            f"color: {theme.FG_SECONDARY}; background: transparent; "
-            f"border: none; letter-spacing: 1.8px;"
+            f"color: {theme.FG_SECONDARY};"
+            " background: transparent;"
+            " border: none;"
+            " letter-spacing: 1.8px;"
         )
-        self.set_value(self._celsius)
+        self.gauge.refresh_theme()
+        self.set_value(self._celsius, animate=False)
 
 
 class TempGridCard(QFrame):
-    """2x2 温度卡 — 外框 + 内嵌 4 个小卡."""
+    """Responsive 2×2 grid of temperature sensors."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -216,13 +297,8 @@ class TempGridCard(QFrame):
 
     def update_from_sense(self, sense) -> None:
         if sense is None:
-            for t in (
-                self.tile_batt,
-                self.tile_ntc1,
-                self.tile_ntc2,
-                self.tile_ntc3,
-            ):
-                t.set_value(None)
+            for tile in self._tiles():
+                tile.set_value(None, animate=False)
             return
         self.tile_batt.set_value(parse_celsius(sense.batt_ntc))
         self.tile_ntc1.set_value(parse_celsius(sense.ntc1_c))
@@ -230,10 +306,13 @@ class TempGridCard(QFrame):
         self.tile_ntc3.set_value(parse_celsius(sense.ntc3_c))
 
     def refresh_theme(self) -> None:
-        for tile in (
+        for tile in self._tiles():
+            tile.refresh_theme()
+
+    def _tiles(self) -> tuple[TempTile, TempTile, TempTile, TempTile]:
+        return (
             self.tile_batt,
             self.tile_ntc1,
             self.tile_ntc2,
             self.tile_ntc3,
-        ):
-            tile.refresh_theme()
+        )

@@ -124,7 +124,7 @@ QPushButton#connectBtn {
     background: #3FB950;
     border: 1px solid #67D878;
     border-radius: 8px;
-    padding-left: 12px;
+    padding: 0 16px;
     letter-spacing: 1px;
 }
 

@@ -215,8 +215,8 @@ class _ModeBadge(QFrame):
         color_map = {
             "FWD": theme.ACCENT,
             "REV": theme.ACCENT,
-            "BRAKE": theme.STATUS_WARN,
-            "STOP": theme.STATUS_WARN,
+            "BRAKE": theme.STATUS_ERROR,
+            "STOP": theme.STATUS_ERROR,
             "SLEEP": theme.STATUS_OFF,
             "WAKE": theme.STATUS_WARN,
         }
@@ -413,7 +413,7 @@ class _ModeButton(QPushButton):
             group_color = {
                 "idle": theme.FG_TERTIARY,
                 "motion": theme.ACCENT,
-                "safety": theme.STATUS_WARN,
+                "safety": theme.STATUS_ERROR,
             }[self.surface_group]
             bg_top = QColor(group_color)
             bg_bottom = QColor(group_color)
@@ -501,6 +501,7 @@ class MotorCard(QFrame):
         ("FWD", "REV"),
         ("BRAKE", "STOP"),
     )
+    button_order = ("SLEEP", "WAKE", "FWD", "REV", "BRAKE", "STOP")
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -521,20 +522,23 @@ class MotorCard(QFrame):
         outer.addWidget(divider)
 
         row = QHBoxLayout()
-        row.setSpacing(14)
+        row.setSpacing(10)
+        row.setContentsMargins(0, 0, 0, 0)
         outer.addLayout(row, 1)
 
         self._btns: dict[str, _ModeButton] = {}
-        group_names = ("idle", "motion", "safety")
-        for pair, group_name in zip(self.button_pairs, group_names):
-            pair_layout = QHBoxLayout()
-            pair_layout.setSpacing(5)
-            pair_layout.setContentsMargins(0, 0, 0, 0)
-            for key in pair:
-                button = _ModeButton(key, group_name, self)
-                pair_layout.addWidget(button, 1)
-                self._btns[key] = button
-            row.addLayout(pair_layout, 2)
+        surface_groups = {
+            "SLEEP": "idle",
+            "WAKE": "idle",
+            "FWD": "motion",
+            "REV": "motion",
+            "BRAKE": "safety",
+            "STOP": "safety",
+        }
+        for key in self.button_order:
+            button = _ModeButton(key, surface_groups[key], self)
+            row.addWidget(button, 1)
+            self._btns[key] = button
 
         self._btns["SLEEP"].clicked.connect(self._on_sleep)
         self._btns["WAKE"].clicked.connect(self._on_wake)

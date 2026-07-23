@@ -10,7 +10,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QBrush, QColor, QImage, QLinearGradient, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from .. import theme
@@ -133,39 +133,23 @@ class ToggleSwitch(QWidget):
         self.set_on(not self._on)
         self.toggled.emit(self._on)
 
-    def _track_colors(self) -> tuple[QColor, QColor, QColor]:
+    def _track_colors(self) -> tuple[QColor, QColor]:
         if not self.isEnabled():
             return (
                 QColor(theme.BG_INPUT),
-                QColor(theme.BG_BASE),
                 QColor(theme.BORDER),
             )
         if self._on:
-            top = QColor(theme.ACCENT_HOVER)
-            bottom = QColor(theme.ACCENT_PRESSED)
-            top.setAlpha(218)
-            bottom.setAlpha(202)
-            return top, bottom, QColor(theme.ACCENT)
+            return QColor(theme.ACCENT), QColor(theme.ACCENT_HOVER)
+        return QColor(theme.BG_CONTROL), QColor(theme.BORDER_LIGHT)
 
-        top = QColor(theme.BG_CONTROL_TOP)
-        bottom = QColor(theme.BG_CONTROL)
-        top.setAlpha(210)
-        bottom.setAlpha(224)
-        return top, bottom, QColor(theme.BORDER_LIGHT)
-
-    def _knob_colors(self) -> tuple[QColor, QColor]:
+    def _knob_color(self) -> QColor:
         if not self.isEnabled():
-            return QColor(theme.FG_DISABLED), QColor(theme.BORDER_LIGHT)
-        if self._on:
-            top = QColor(theme.SWITCH_KNOB_TOP)
-            bottom = QColor(theme.SWITCH_KNOB_BOTTOM)
-        else:
-            top = QColor(theme.FG_SECONDARY).lighter(118)
-            bottom = QColor(theme.FG_SECONDARY)
+            return QColor(theme.FG_DISABLED)
+        color = QColor(theme.SWITCH_KNOB_TOP)
         if self._pressed:
-            top = top.darker(112)
-            bottom = bottom.darker(112)
-        return top, bottom
+            color = color.darker(110)
+        return color
 
     def paintEvent(self, _event) -> None:  # type: ignore[override]
         scale = self.RENDER_SCALE
@@ -187,44 +171,13 @@ class ToggleSwitch(QWidget):
             self.TRACK_HEIGHT,
         )
         radius = self.TRACK_HEIGHT / 2
-        track_top, track_bottom, border = self._track_colors()
+        track_fill, border = self._track_colors()
         if self.isEnabled() and self.underMouse():
             border = QColor(theme.ACCENT_HOVER)
 
-        halo = QColor(
-            theme.ACCENT
-            if self._on and self.isEnabled()
-            else theme.BORDER_LIGHT
-        )
-        halo.setAlpha(34 if self._on else 18)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(halo, 2.5))
+        painter.setBrush(track_fill)
+        painter.setPen(QPen(border, 1.0))
         painter.drawRoundedRect(track_rect, radius, radius)
-
-        track_gradient = QLinearGradient(
-            track_rect.left(),
-            track_rect.top(),
-            track_rect.left(),
-            track_rect.bottom(),
-        )
-        track_gradient.setColorAt(0.0, track_top)
-        track_gradient.setColorAt(1.0, track_bottom)
-        painter.setBrush(QBrush(track_gradient))
-        painter.setPen(QPen(border, 1.15))
-        painter.drawRoundedRect(track_rect, radius, radius)
-
-        highlight = QColor(theme.SWITCH_KNOB_TOP)
-        highlight.setAlpha(34)
-        painter.setPen(QPen(
-            highlight,
-            1,
-            Qt.PenStyle.SolidLine,
-            Qt.PenCapStyle.RoundCap,
-        ))
-        painter.drawLine(
-            QPointF(track_rect.left() + radius, track_rect.top() + 2),
-            QPointF(track_rect.right() - radius, track_rect.top() + 2),
-        )
 
         if self.hasFocus():
             focus_rect = track_rect.adjusted(1.5, 1.5, -1.5, -1.5)
@@ -251,16 +204,7 @@ class ToggleSwitch(QWidget):
             self.KNOB_SIZE / 2 + 0.8,
         )
 
-        knob_top, knob_bottom = self._knob_colors()
-        knob_gradient = QLinearGradient(
-            knob_center.x(),
-            knob_y,
-            knob_center.x(),
-            knob_y + self.KNOB_SIZE,
-        )
-        knob_gradient.setColorAt(0.0, knob_top)
-        knob_gradient.setColorAt(1.0, knob_bottom)
-        painter.setBrush(QBrush(knob_gradient))
+        painter.setBrush(self._knob_color())
         painter.setPen(QPen(QColor(theme.SWITCH_KNOB_BORDER), 0.9))
         painter.drawEllipse(
             knob_center,
@@ -268,18 +212,6 @@ class ToggleSwitch(QWidget):
             self.KNOB_SIZE / 2,
         )
 
-        knob_highlight = QColor(theme.SWITCH_KNOB_TOP)
-        knob_highlight.setAlpha(90)
-        painter.setBrush(knob_highlight)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(
-            QPointF(
-                knob_center.x() - self.KNOB_SIZE * 0.16,
-                knob_center.y() - self.KNOB_SIZE * 0.20,
-            ),
-            self.KNOB_SIZE * 0.13,
-            self.KNOB_SIZE * 0.08,
-        )
         painter.end()
 
         target = QPainter(self)
