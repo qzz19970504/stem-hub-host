@@ -64,7 +64,7 @@ Expected: only release dependency and build documentation changes.
 Run:
 
 ```powershell
-& 'C:\ProgramData\miniconda3\python.exe' -m venv 'env\release'
+& 'C:\Users\44575\.conda\envs\stem-hub-host\python.exe' -m venv 'env\release'
 ```
 
 Expected: `env\release\Scripts\python.exe` exists.
@@ -113,7 +113,7 @@ Do not modify UI or control behavior to make the release environment pass.
 ### Task 4: Build and inspect the optimized executable
 
 **Files:**
-- Use: `stem-hub-host.spec`
+- Modify: `stem-hub-host.spec`
 - Generate, ignored by Git: `build/`, `dist/stem-hub-host.exe`
 
 - [ ] **Step 1: Preserve the old release size**
@@ -127,6 +127,18 @@ Get-Item 'dist\stem-hub-host.exe' | Select-Object Length
 Expected baseline: `252837203` bytes.
 
 - [ ] **Step 2: Build from clean analysis state**
+
+Before `Analysis`, prepend the base Python 3.11 interpreter's `Library/bin`
+directory to `PATH` so PyInstaller cannot resolve `pyexpat.pyd` against a DLL
+from another Conda installation:
+
+```python
+PYTHON_BASE_LIBRARY_BIN = Path(sys.base_prefix) / "Library" / "bin"
+if PYTHON_BASE_LIBRARY_BIN.is_dir():
+    os.environ["PATH"] = (
+        f"{PYTHON_BASE_LIBRARY_BIN}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
+```
 
 Run:
 

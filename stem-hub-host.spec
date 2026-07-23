@@ -2,11 +2,22 @@
 # Build:  pyinstaller --noconfirm stem-hub-host.spec
 # Output: dist/stem-hub-host.exe
 
+import os
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH).resolve()
 
 block_cipher = None
+
+# A venv created from Conda keeps its matching native runtime under the base
+# interpreter's Library/bin. Put it ahead of unrelated Conda installations so
+# dependency analysis cannot pair Python 3.11 extensions with Python 3.13 DLLs.
+PYTHON_BASE_LIBRARY_BIN = Path(sys.base_prefix) / "Library" / "bin"
+if PYTHON_BASE_LIBRARY_BIN.is_dir():
+    os.environ["PATH"] = (
+        f"{PYTHON_BASE_LIBRARY_BIN}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
 
 # 数据文件 (style.qss)
 datas = [

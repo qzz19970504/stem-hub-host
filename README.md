@@ -64,3 +64,30 @@ stem-hub-host/
 ## 状态
 
 🚧 **早期开发中**。当前只搭好工程骨架，能弹个空窗。
+
+## 精简发布包
+
+发布包必须在独立的 Python 3.11 虚拟环境中构建，避免 Conda 版 NumPy
+把整套 Intel MKL/TBB 运行库收集进单文件程序。发布依赖固定在
+`requirements-release.txt`，应用源码、QSS 和字体资源与开发环境共用。
+
+```powershell
+# 1. 从已验证的 Python 3.11 解释器创建隔离环境
+& 'C:\Users\44575\.conda\envs\stem-hub-host\python.exe' -m venv 'env\release'
+
+# 2. 安装固定版本的 PyPI 依赖
+& 'env\release\Scripts\python.exe' -m pip install --upgrade pip
+& 'env\release\Scripts\python.exe' -m pip install -r requirements-release.txt
+
+# 下载较慢时，用下面命令替换上一条安装命令（二选一）
+& 'env\release\Scripts\python.exe' -m pip install `
+    --index-url https://pypi.tuna.tsinghua.edu.cn/simple `
+    -r requirements-release.txt
+
+# 3. 完整测试后执行干净构建
+& 'env\release\Scripts\python.exe' -m pytest tests -q
+& 'env\release\Scripts\python.exe' -m PyInstaller --clean --noconfirm stem-hub-host.spec
+```
+
+构建完成后还需用 `--fake` 启动 `dist\stem-hub-host.exe`，并检查打包清单
+包含四个字体文件和 `style.qss`，且不再包含 `mkl*.dll` 或 `tbb*.dll`。

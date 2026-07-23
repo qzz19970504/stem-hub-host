@@ -26,13 +26,25 @@ The pre-compression state is preserved in Git commit `74e4101`.
 Build the unchanged application from an isolated `venv` populated with pinned
 PyPI wheels. The PyPI NumPy wheel uses its own compact numerical runtime instead
 of collecting the Conda environment's complete MKL/TBB directory. Keep the
-existing PyInstaller spec as the initial collection policy so that Qt plugins
-and resources are not removed speculatively.
+existing PyInstaller collection policy so that Qt plugins and resources are not
+removed speculatively.
 
 This is safer than filtering individual MKL DLLs from a Conda build because
 runtime CPU dispatch can load different libraries on different machines. It is
 also safer than immediately excluding optional Qt modules because pyqtgraph may
 load some of them dynamically.
+
+## Native Runtime Resolution
+
+A virtual environment created from a Conda Python interpreter still obtains
+standard-library extension DLLs from that interpreter's `Library/bin`
+directory. On a machine with more than one Conda installation, PyInstaller can
+otherwise find an unrelated installation first through `PATH`.
+
+The spec therefore prepends `Path(sys.base_prefix) / "Library" / "bin"` before
+dependency analysis. This keeps Python 3.11 extensions paired with the Python
+3.11 native runtime. It does not add Conda NumPy or MKL because NumPy itself is
+installed from the pinned PyPI wheel inside the isolated environment.
 
 ## Build Inputs
 
