@@ -1,0 +1,612 @@
+"""Controller — UI <-> SerialWorker 联动.
+
+- 持有 SerialWorker 实例
+- 监听 UI 信号 → 翻译成 AT 命令下发
+- 监听 SerialWorker 响应 → 推送到 UI 更新
+- 周期拉取 SENSE/FAULT/MOTOR
+- 握手: 打开串口后 200ms 发起 AT+VERSION?, 500ms 内回 OK + 有效版本即成功
+"""
+from __future__ import annotations
+
+from collections import defaultdict, deque
+from collections.abc import Callable
+from typing import Optional
+
+from PySide6.QtCore import QObject, QTimer, Signal
+
+from .at_protocol import (
+    cmd_handshake,
+    cmd_query_fault,
+    cmd_query_motor,
+    cmd_query_sense,
+    cmd_set_lm51770,
+    cmd_set_led,
+    cmd_set_motor,
+    cmd_set_mp4317,
+    cmd_set_nmos,
+    cmd_set_uart2,
+    cmd_set_uart23,
+    cmd_set_uart3,
+)
+from .data_buffer import DataBuffer
+from .serial_worker import SerialError, SerialTimeout, SerialWorker
+
+
+class Controller(QObject):
+    """UI 与串口之间的胶水."""
+
+    # ---- 状态 ----
+    sense_request_hz_changed = Signal(float)
+    error_occurred = Signal(str)
+    handshake_failed = Signal(str)
+    output_command_failed = Signal(str, bool, str)
+    motor_command_failed = Signal(str, str, str)
+    charge_transition_changed = Signal(bool)
+    passthrough_mode_changed = Signal(str)
+    passthrough_transition_changed = Signal(bool)
+
+    def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._worker = worker
+        self._data_buffer = DataBuffer()
+
+        # 状态缓存
+        self._is_open = False
+        self._handshake_ok = False
+        self._sense_hz = 2.0  # 默认 2 Hz
+        self._latest_sense = None
+        self._latest_motor = None
+        self._confirmed_motor_mode: str | None = None
+        self._latest_fault = None
+        self._pending_outputs: dict[
+            str,
+            deque[
+                tuple[
+                    str,
+                    bool,
+                    Callable[[], None] | None,
+                    Callable[[str], None] | None,
+                ]
+            ],
+        ] = defaultdict(deque)
+        self._pending_bridges: dict[
+            str,
+            deque[
+                tuple[Callable[[], None], Callable[[str], None]]
+            ],
+        ] = defaultdict(deque)
+        self._passthrough_mode = "off"
+        self._charge_transition_active = False
+        self._queued_charge_mode: str | None = None
+        self._all_outputs_off_queued = False
+        self._passthrough_transition_active = False
+        self._queued_passthrough_mode: str | None = None
+
+        # 周期拉取定时器
+        self._sense_timer = QTimer(self)
+        self._sense_timer.timeout.connect(self._poll_once)
+        self._apply_sense_interval()
+
+        # 握手专用
+        self._handshake_delay_timer = QTimer(self)
+        self._handshake_delay_timer.setSingleShot(True)
+        self._handshake_delay_timer.timeout.connect(self._do_handshake)
+        self._handshake_timer: Optional[QTimer] = None
+
+        # 连 worker 信号
+        worker.connected.connect(self._on_worker_connected)
+        worker.disconnected.connect(self._on_worker_disconnected)
+        worker.error_occurred.connect(self._on_worker_error)
+        worker.at_data_received.connect(self._on_at_data)
+        worker.response_received.connect(self._on_response)
+        worker.passthrough_received.connect(self._on_passthrough)
+
+    # ---- 公开 API ----
+    @property
+    def worker(self) -> SerialWorker:
+        return self._worker
+
+    @property
+    def is_connected(self) -> bool:
+        return self._is_open
+
+    @property
+    def is_handshake_ok(self) -> bool:
+        return self._handshake_ok
+
+    @property
+    def sense_hz(self) -> float:
+        return self._sense_hz
+
+    def set_sense_hz(self, hz: float) -> None:
+        if hz <= 0:
+            return
+        self._sense_hz = hz
+        self._apply_sense_interval()
+        self.sense_request_hz_changed.emit(hz)
+
+    def open(self, port: str, baud: int = 115200) -> bool:
+        ok = self._worker.open(port, baud)
+        return ok
+
+    def close(self) -> None:
+        self._stop_polling()
+        self._worker.close()
+
+    # ---- 周期拉取 ----
+    def _apply_sense_interval(self) -> None:
+        ms = max(50, int(1000 / self._sense_hz))
+        self._sense_timer.setInterval(ms)
+
+    def _start_polling(self) -> None:
+        self._sense_timer.start()
+
+    def _stop_polling(self) -> None:
+        self._sense_timer.stop()
+
+    def _poll_once(self) -> None:
+        """发 SENSE / FAULT / MOTOR 查询, 不阻塞 (用 send_only 让响应自然回来)."""
+        if (
+            not self._is_open
+            or not self._handshake_ok
+            or self._passthrough_mode != "off"
+            or self._passthrough_transition_active
+        ):
+            return
+        self._worker.send_command(cmd_query_sense())
+        self._worker.send_command(cmd_query_fault())
+        self._worker.send_command(cmd_query_motor())
+
+    # ---- 用户操作: 命令下发 ----
+    def set_motor(self, mode: str) -> None:
+        if not self._standard_commands_available():
+            return
+        try:
+            self._worker.send_command(cmd_set_motor(mode))
+        except SerialError as e:
+            self._on_worker_error(f"电机命令失败: {e}")
+
+    def set_nmos(self, idx: int, on: bool) -> None:
+        self._send_output(cmd_set_nmos(idx, on), f"NMOS{idx}", on)
+
+    def set_mp4317(self, on: bool) -> None:
+        self._send_output(cmd_set_mp4317(on), "DISCHARGE", on)
+
+    def set_lm51770(self, on: bool) -> None:
+        self._send_output(cmd_set_lm51770(on), "CHARGE", on)
+
+    def set_charge_mode(self, mode: str) -> None:
+        """Serialize mutually exclusive charge-path changes."""
+        if mode not in {"charge", "discharge", "off"}:
+            return
+        if self._charge_transition_active:
+            self._queued_charge_mode = mode
+            return
+        if not self._standard_commands_available():
+            return
+
+        self._charge_transition_active = True
+        self.charge_transition_changed.emit(True)
+        self._run_charge_transition(mode)
+
+    def _run_charge_transition(self, mode: str) -> None:
+        if mode == "charge":
+            self._send_output(
+                cmd_set_mp4317(False),
+                "DISCHARGE",
+                False,
+                on_success=lambda: self._send_output(
+                    cmd_set_lm51770(True),
+                    "CHARGE",
+                    True,
+                    on_success=self._finish_charge_transition,
+                    on_failure=lambda _reason: self._finish_charge_transition(),
+                    allow_charge_transition=True,
+                ),
+                on_failure=lambda reason: self._abort_charge_transition(
+                    "CHARGE", reason
+                ),
+                allow_charge_transition=True,
+            )
+        elif mode == "discharge":
+            self._send_output(
+                cmd_set_lm51770(False),
+                "CHARGE",
+                False,
+                on_success=lambda: self._send_output(
+                    cmd_set_mp4317(True),
+                    "DISCHARGE",
+                    True,
+                    on_success=self._finish_charge_transition,
+                    on_failure=lambda _reason: self._finish_charge_transition(),
+                    allow_charge_transition=True,
+                ),
+                on_failure=lambda reason: self._abort_charge_transition(
+                    "DISCHARGE", reason
+                ),
+                allow_charge_transition=True,
+            )
+        else:
+            def send_mp_off() -> None:
+                self._send_output(
+                    cmd_set_mp4317(False),
+                    "DISCHARGE",
+                    False,
+                    on_success=self._finish_charge_transition,
+                    on_failure=lambda _reason: self._finish_charge_transition(),
+                    allow_charge_transition=True,
+                )
+
+            self._send_output(
+                cmd_set_lm51770(False),
+                "CHARGE",
+                False,
+                on_success=send_mp_off,
+                on_failure=lambda _reason: send_mp_off(),
+                allow_charge_transition=True,
+            )
+
+    def _abort_charge_transition(self, target: str, reason: str) -> None:
+        self.output_command_failed.emit(target, True, f"aborted: {reason}")
+        self._finish_charge_transition()
+
+    def set_all_outputs_off(self) -> None:
+        """Turn every output off sequentially in the documented safe order."""
+        if self._charge_transition_active:
+            self._queued_charge_mode = None
+            self._all_outputs_off_queued = True
+            return
+        if not self._standard_commands_available():
+            return
+
+        self._charge_transition_active = True
+        self.charge_transition_changed.emit(True)
+        self._run_all_outputs_off()
+
+    def _run_all_outputs_off(self) -> None:
+        steps = (
+            (cmd_set_lm51770(False), "CHARGE"),
+            (cmd_set_mp4317(False), "DISCHARGE"),
+            (cmd_set_nmos(1, False), "NMOS1"),
+            (cmd_set_nmos(2, False), "NMOS2"),
+            (cmd_set_led(False), "LIGHTS"),
+        )
+
+        def run_step(index: int) -> None:
+            if index >= len(steps):
+                self._finish_charge_transition()
+                return
+            command, control = steps[index]
+            advance = lambda _reason=None: run_step(index + 1)
+            self._send_output(
+                command,
+                control,
+                False,
+                on_success=lambda: advance(),
+                on_failure=advance,
+                allow_charge_transition=True,
+            )
+
+        run_step(0)
+
+    def _finish_charge_transition(self) -> None:
+        if self._all_outputs_off_queued and self._is_open:
+            self._all_outputs_off_queued = False
+            self._run_all_outputs_off()
+            return
+        next_mode = self._queued_charge_mode
+        self._queued_charge_mode = None
+        if next_mode is not None and self._is_open:
+            self._run_charge_transition(next_mode)
+            return
+
+        self._charge_transition_active = False
+        self.charge_transition_changed.emit(False)
+        next_passthrough = self._queued_passthrough_mode
+        self._queued_passthrough_mode = None
+        if next_passthrough is not None:
+            self.set_passthrough(next_passthrough)
+
+    def set_led(self, on: bool) -> None:
+        self._send_output(cmd_set_led(on), "LIGHTS", on)
+
+    def _send_output(
+        self,
+        cmd: str,
+        control: str,
+        on: bool,
+        *,
+        on_success: Callable[[], None] | None = None,
+        on_failure: Callable[[str], None] | None = None,
+        allow_charge_transition: bool = False,
+    ) -> None:
+        if not self._standard_commands_available():
+            return
+        if (
+            self._charge_transition_active
+            and control in {"CHARGE", "DISCHARGE"}
+            and not allow_charge_transition
+        ):
+            return
+        self._pending_outputs[cmd].append(
+            (control, on, on_success, on_failure)
+        )
+        try:
+            self._worker.send_command(cmd)
+        except SerialError as e:
+            self._pending_outputs[cmd].pop()
+            self.output_command_failed.emit(control, on, str(e))
+            if on_failure is not None:
+                on_failure(str(e))
+            self._on_worker_error(f"{control} 命令失败: {e}")
+
+    def set_passthrough(self, mode: str) -> None:
+        """mode: 'uart2' / 'uart3' / 'both' / 'off'."""
+        if mode not in {"uart2", "uart3", "both", "off"}:
+            return
+        if not self._is_open:
+            return
+        if self._charge_transition_active:
+            self._queued_passthrough_mode = mode
+            return
+        if self._passthrough_transition_active:
+            self._queued_passthrough_mode = mode
+            return
+
+        self._passthrough_transition_active = True
+        self.passthrough_transition_changed.emit(True)
+        self._run_passthrough_transition(mode)
+
+    def _run_passthrough_transition(self, mode: str) -> None:
+        previous = self._passthrough_mode
+        self._worker.set_passthrough_raw(False)
+        self._stop_polling()
+
+        def revert(reason: str) -> None:
+            self._apply_passthrough_mode(previous)
+            self._on_worker_error(f"透传命令失败: {reason}")
+            self._finish_passthrough_transition()
+
+        def confirm() -> None:
+            self._apply_passthrough_mode(mode)
+            self._finish_passthrough_transition()
+
+        def enable_failed(reason: str) -> None:
+            self._apply_passthrough_mode("off")
+            self._on_worker_error(f"透传命令失败: {reason}")
+            self._finish_passthrough_transition()
+
+        if mode == "uart2":
+            after_off = confirm if previous == "both" else lambda: self._send_bridge(
+                cmd_set_uart2(True), confirm, enable_failed
+            )
+            self._send_bridge(cmd_set_uart3(False), after_off, revert)
+        elif mode == "uart3":
+            after_off = confirm if previous == "both" else lambda: self._send_bridge(
+                cmd_set_uart3(True), confirm, enable_failed
+            )
+            self._send_bridge(cmd_set_uart2(False), after_off, revert)
+        elif mode == "both":
+            self._send_bridge(cmd_set_uart23(True), confirm, revert)
+        elif mode == "off":
+            self._send_bridge(cmd_set_uart23(False), confirm, revert)
+
+    def _finish_passthrough_transition(self) -> None:
+        next_mode = self._queued_passthrough_mode
+        self._queued_passthrough_mode = None
+        if next_mode is not None and next_mode != self._passthrough_mode and self._is_open:
+            self._run_passthrough_transition(next_mode)
+            return
+
+        self._passthrough_transition_active = False
+        self.passthrough_transition_changed.emit(False)
+        if self._passthrough_mode == "off" and self._is_open and self._handshake_ok:
+            self._start_polling()
+
+    def _send_bridge(
+        self,
+        cmd: str,
+        on_success: Callable[[], None],
+        on_failure: Callable[[str], None],
+    ) -> None:
+        self._pending_bridges[cmd].append((on_success, on_failure))
+        try:
+            self._worker.send_command(cmd)
+        except SerialError as error:
+            self._pending_bridges[cmd].pop()
+            on_failure(str(error))
+
+    def _apply_passthrough_mode(self, mode: str) -> None:
+        self._passthrough_mode = mode
+        self._worker.set_passthrough_raw(mode != "off")
+        if (
+            mode == "off"
+            and not self._passthrough_transition_active
+            and self._is_open
+            and self._handshake_ok
+        ):
+            self._start_polling()
+        self.passthrough_mode_changed.emit(mode)
+
+    def send_passthrough_bytes(self, data: bytes) -> bool:
+        """Write exact passthrough bytes and report whether transport accepted them."""
+        if (
+            not self._is_open
+            or not self._handshake_ok
+            or self._passthrough_mode == "off"
+            or self._passthrough_transition_active
+        ):
+            return False
+        try:
+            self._worker.send_bytes(data)
+            return True
+        except SerialError as e:
+            self._on_worker_error(f"透传发送失败: {e}")
+            return False
+
+    def send_raw(self, cmd: str) -> None:
+        """AT 输入框直接发, 不等回包."""
+        if not self._standard_commands_available():
+            return
+        try:
+            self._worker.send_command(cmd)
+        except SerialError as e:
+            self._on_worker_error(f"AT 发送失败: {e}")
+
+    def _standard_commands_available(self) -> bool:
+        return (
+            self._is_open
+            and self._passthrough_mode == "off"
+            and not self._passthrough_transition_active
+        )
+
+    # ---- Worker 信号处理 ----
+    def _on_worker_connected(self, port: str, baud: int) -> None:
+        self._is_open = True
+        self._handshake_ok = False
+        self._cancel_handshake_timer()
+        self._start_handshake()
+
+    def _on_worker_disconnected(self) -> None:
+        self._is_open = False
+        self._handshake_ok = False
+        self._stop_polling()
+        self._handshake_delay_timer.stop()
+        self._cancel_handshake_timer()
+        self._latest_sense = None
+        self._latest_motor = None
+        self._confirmed_motor_mode = None
+        self._latest_fault = None
+        self._pending_outputs.clear()
+        self._pending_bridges.clear()
+        charge_was_active = self._charge_transition_active
+        bridge_was_active = self._passthrough_transition_active
+        self._charge_transition_active = False
+        self._queued_charge_mode = None
+        self._all_outputs_off_queued = False
+        self._passthrough_transition_active = False
+        self._queued_passthrough_mode = None
+        self._passthrough_mode = "off"
+        self._worker.set_passthrough_raw(False)
+        if charge_was_active:
+            self.charge_transition_changed.emit(False)
+        if bridge_was_active:
+            self.passthrough_transition_changed.emit(False)
+        self.passthrough_mode_changed.emit("off")
+
+    def _on_worker_error(self, msg: str) -> None:
+        self.error_occurred.emit(msg)
+
+    def _on_passthrough(self, line: str) -> None:
+        # 透传面板在第 ⑥ 步接管
+        pass
+
+    def _on_response(self, cmd: str, resp) -> None:
+        pending = self._pending_outputs.get(cmd)
+        if pending:
+            control, requested_state, on_success, on_failure = pending.popleft()
+            if not pending:
+                self._pending_outputs.pop(cmd, None)
+            if resp.error is not None:
+                reason = resp.error.code
+                self.output_command_failed.emit(
+                    control,
+                    requested_state,
+                    reason,
+                )
+                if on_failure is not None:
+                    on_failure(reason)
+            elif on_success is not None:
+                on_success()
+
+        bridge_pending = self._pending_bridges.get(cmd)
+        if bridge_pending:
+            on_success, on_failure = bridge_pending.popleft()
+            if not bridge_pending:
+                self._pending_bridges.pop(cmd, None)
+            if resp.error is not None:
+                on_failure(resp.error.code)
+            else:
+                on_success()
+        # 握手响应特殊处理
+        stripped_cmd = cmd.strip()
+        if stripped_cmd.startswith("AT+MOTOR="):
+            requested_mode = stripped_cmd.partition("=")[2]
+            if resp.error is not None:
+                self.motor_command_failed.emit(
+                    requested_mode,
+                    self._confirmed_motor_mode or "",
+                    resp.error.code,
+                )
+            else:
+                self._confirmed_motor_mode = requested_mode
+
+        if stripped_cmd.startswith("AT+VERSION?") and resp.version is not None:
+            self._handshake_ok = True
+            self._cancel_handshake_timer()
+            # 启动周期拉取
+            self._start_polling()
+            return
+
+    def _on_at_data(self, cmd: str, resp) -> None:
+        if resp.sense is not None:
+            self._latest_sense = resp.sense
+            self._data_buffer.feed_sense(resp.sense)
+        if resp.motor is not None:
+            self._latest_motor = resp.motor
+            self._confirmed_motor_mode = resp.motor.mode
+        if resp.fault is not None:
+            self._latest_fault = resp.fault
+
+    # ---- 握手 ----
+    def _start_handshake(self) -> None:
+        # Restarting this timer cancels a stale handshake from a prior port.
+        self._handshake_delay_timer.start(200)
+
+    def _do_handshake(self) -> None:
+        if not self._is_open:
+            return
+        try:
+            # 同步等, 最多 500ms
+            resp = self._worker.send_and_wait(cmd_handshake(), timeout_ms=500)
+            if resp.version is not None:
+                self._handshake_ok = True
+                self._start_polling()
+            else:
+                reason = (
+                    resp.error.code
+                    if resp.error is not None
+                    else "INVALID_VERSION"
+                )
+                self.handshake_failed.emit(reason)
+                self._schedule_handshake_retry()
+        except SerialTimeout:
+            self._on_worker_error("握手超时，2 秒后重试")
+            self.handshake_failed.emit("TIMEOUT")
+            self._schedule_handshake_retry()
+        except SerialError as e:
+            self._on_worker_error(f"握手失败: {e}")
+            self.handshake_failed.emit(str(e))
+            if self._is_open:
+                self._schedule_handshake_retry()
+
+    def _schedule_handshake_retry(self) -> None:
+        if self._handshake_timer is None:
+            self._handshake_timer = QTimer(self)
+            self._handshake_timer.timeout.connect(self._do_handshake)
+        self._handshake_timer.start(2000)  # 2s 重试
+
+    def _cancel_handshake_timer(self) -> None:
+        if self._handshake_timer is not None:
+            self._handshake_timer.stop()
+
+    # ---- UI 拉取最新状态 ----
+    def get_latest(self):
+        return {
+            "sense": self._latest_sense,
+            "motor": self._latest_motor,
+            "fault": self._latest_fault,
+        }
+
+    def get_data_buffer(self) -> DataBuffer:
+        return self._data_buffer

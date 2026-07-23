@@ -1,0 +1,194 @@
+"""Hardware output controls and derived fault indicators."""
+from __future__ import annotations
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .. import theme
+from .fault_indicator import FaultIndicator
+from .toggle_switch import ToggleSwitch
+
+
+class _ToggleCell(QWidget):
+    """单个 toggle + 标签 (竖向, 居中)."""
+
+    def __init__(self, name: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        col = QVBoxLayout(self)
+        col.setContentsMargins(0, 6, 0, 6)
+        col.setSpacing(6)
+        col.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        self.toggle = ToggleSwitch(self)
+        col.addWidget(self.toggle, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self.label = QLabel(name)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        f = QFont(theme.FONT_MONO.split(",")[0].strip())
+        f.setPointSize(11)
+        f.setBold(True)
+        self.label.setFont(f)
+        self.label.setStyleSheet(
+            f"color: {theme.FG_SECONDARY}; background: transparent; letter-spacing: 1.5px;"
+        )
+        col.addWidget(self.label)
+
+
+def _make_divider() -> QFrame:
+    f = QFrame()
+    f.setObjectName("divider")
+    f.setFixedHeight(1)
+    return f
+
+
+class ChargeModeCard(QFrame):
+    """Control the five real outputs and expose honest fault states."""
+
+    toggle_changed = Signal(str, bool)
+    all_off_clicked = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("card")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 14, 16, 14)
+        outer.setSpacing(10)
+
+        self._cells: dict[str, _ToggleCell] = {}
+        top_row = self._make_toggle_row(["CHARGE", "DISCHARGE"])
+        outer.addLayout(top_row)
+
+        outer.addLayout(self._make_toggle_row(
+            ["NMOS1", "NMOS2", "LIGHTS"]
+        ))
+
+        self.all_off_row = QFrame(self)
+        self.all_off_row.setObjectName("allOffRow")
+        all_off_layout = QHBoxLayout(self.all_off_row)
+        all_off_layout.setContentsMargins(0, 0, 0, 0)
+        all_off_layout.addStretch(1)
+        self.all_off_button = QPushButton("ALL OFF")
+        self.all_off_button.setObjectName("allOffButton")
+        self.all_off_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.all_off_button.setFixedSize(112, 34)
+        all_off_font = QFont(theme.FONT_DISPLAY)
+        all_off_font.setPointSize(11)
+        all_off_font.setBold(True)
+        self.all_off_button.setFont(all_off_font)
+        self.all_off_button.clicked.connect(self.all_off_clicked)
+        all_off_layout.addWidget(self.all_off_button)
+        all_off_layout.addStretch(1)
+        outer.addWidget(self.all_off_row)
+
+        # 下划线 (分隔 toggle 区与故障区)
+        outer.addSpacing(6)
+        outer.addStretch(1)
+        outer.addWidget(_make_divider())
+        outer.addSpacing(6)
+
+        fault_grid = QGridLayout()
+        fault_grid.setHorizontalSpacing(8)
+        fault_grid.setVerticalSpacing(8)
+        self.fault_overtemp = FaultIndicator("OVERTEMP")
+        self.fault_overcurrent = FaultIndicator("OVERCURRENT")
+        self.fault_undervoltage = FaultIndicator("UNDERVOLTAGE")
+        self.fault_drv = FaultIndicator("DRV FAULT")
+        self.fault_aux = FaultIndicator("AUX FAULT")
+
+        fault_grid.addWidget(self.fault_overtemp, 0, 0)
+        fault_grid.addWidget(self.fault_overcurrent, 0, 1)
+        fault_grid.addWidget(self.fault_undervoltage, 0, 2)
+        fault_grid.addWidget(self.fault_drv, 1, 0)
+        fault_grid.addWidget(self.fault_aux, 1, 1)
+
+        outer.addLayout(fault_grid)
+        outer.addStretch(1)
+
+    def _make_toggle_row(self, names: list[str]) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        for name in names:
+            cell = _ToggleCell(name, self)
+            cell.toggle.toggled.connect(
+                lambda on, n=name: self.toggle_changed.emit(n, on)
+            )
+            self._cells[name] = cell
+            row.addWidget(cell, 1)
+        return row
+
+    def is_on(self, name: str) -> bool:
+        return self._cells[name].toggle.is_on()
+
+    @property
+    def control_names(self) -> tuple[str, ...]:
+        """Return stable hardware control identifiers in display order."""
+
+        return tuple(self._cells)
+
+    def set_toggle(self, name: str, on: bool, *, animate: bool = True) -> None:
+        self._cells[name].toggle.set_on(on, animate=animate)
+
+    def set_enabled(self, enabled: bool) -> None:
+        for cell in self._cells.values():
+            cell.toggle.setEnabled(enabled)
+            color = theme.FG_PRIMARY if enabled else theme.FG_DISABLED
+            cell.label.setStyleSheet(
+                f"color: {color}; background: transparent; letter-spacing: 1.5px;"
+            )
+        self.all_off_button.setEnabled(enabled)
+
+    def update_fault(
+        self,
+        drv: int | None = None,
+        aux: int | None = None,
+        *,
+        overtemp: bool | None = None,
+        overcurrent: bool | None = None,
+        undervoltage: bool | None = None,
+    ) -> None:
+        if drv is not None:
+            state = "error" if drv else "ok"
+            self.fault_drv.set_state(state)
+        if aux is not None:
+            state = "error" if aux else "ok"
+            self.fault_aux.set_state(state)
+        if overtemp is not None:
+            self.fault_overtemp.set_state("error" if overtemp else "ok")
+        if overcurrent is not None:
+            self.fault_overcurrent.set_state("error" if overcurrent else "ok")
+        if undervoltage is not None:
+            self.fault_undervoltage.set_state("error" if undervoltage else "ok")
+
+    def clear_all(self) -> None:
+        self.clear_controls()
+        for fault in (
+            self.fault_overtemp,
+            self.fault_overcurrent,
+            self.fault_undervoltage,
+            self.fault_drv,
+            self.fault_aux,
+        ):
+            fault.set_state("off")
+
+    def clear_controls(self) -> None:
+        """Reset local output switches without emitting hardware commands."""
+
+        for cell in self._cells.values():
+            cell.toggle.set_on(False, animate=False)
+
+    def refresh_theme(self) -> None:
+        self.set_enabled(self.all_off_button.isEnabled())
+        for cell in self._cells.values():
+            cell.toggle.update()
