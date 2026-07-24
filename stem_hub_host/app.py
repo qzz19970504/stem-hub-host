@@ -11,6 +11,7 @@ from typing import Optional
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
+from .branding import APP_DISPLAY_NAME, load_app_icon
 from .ui import theme
 from .ui.fonts import FontFamilies, load_application_fonts
 
@@ -24,8 +25,9 @@ def get_app() -> QApplication:
     global _app, _font_families
     if _app is None:
         _app = QApplication.instance() or QApplication(sys.argv)
-        _app.setApplicationName("stem-hub host")
+        _app.setApplicationName(APP_DISPLAY_NAME)
         _app.setOrganizationName("stem-hub")
+        _app.setWindowIcon(load_app_icon())
     if _font_families is None:
         _font_families = load_application_fonts()
         theme.configure_font_families(

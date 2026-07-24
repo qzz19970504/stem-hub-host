@@ -78,6 +78,9 @@ def qss_tokens() -> dict[str, str]:
             "COMMAND_RADIUS": str(theme.COMMAND_RADIUS),
             "CONTROL_RADIUS": str(theme.CONTROL_RADIUS),
             "CHIP_RADIUS": str(theme.CHIP_RADIUS),
+            "SERIAL_BADGE_TEXT_INSET": str(
+                theme.SERIAL_BADGE_TEXT_INSET
+            ),
         }
     )
     return tokens

@@ -64,3 +64,18 @@ def test_disconnect_action_has_room_for_complete_label(
     serial_bar: SerialBar,
 ) -> None:
     assert serial_bar.connect_btn.width() >= 132
+
+
+def test_status_and_action_controls_share_dimensions_and_typography(
+    serial_bar: SerialBar,
+) -> None:
+    assert serial_bar.status_badge.size() == serial_bar.connect_btn.size()
+    assert (
+        serial_bar.status_badge.font().pointSize()
+        == serial_bar.connect_btn.font().pointSize()
+    )
+    assert (
+        serial_bar.status_badge.TEXT_LEFT_INSET
+        - serial_bar.status_badge.DOT_CENTER_X
+        >= 18
+    )

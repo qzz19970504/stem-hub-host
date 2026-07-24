@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from PySide6.QtGui import QColor, QImage
 
+from stem_hub_host import visual_audit
+from stem_hub_host.ui import theme
 from stem_hub_host.visual_regression import compare_images
 
 
@@ -53,3 +55,13 @@ def test_compare_images_accepts_identical_images() -> None:
     assert metrics.changed_pixel_ratio == 0.0
     assert metrics.max_channel_diff == 0
     assert metrics.passes()
+
+
+def test_visual_audit_console_seed_spans_temperature_bands() -> None:
+    values = getattr(visual_audit, "CONSOLE_TEMPERATURES", ())
+
+    assert values == (12.0, 36.0, 58.0, 84.0)
+    assert len({
+        theme.temp_color(value)
+        for value in values
+    }) == 4

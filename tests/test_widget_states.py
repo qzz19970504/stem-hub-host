@@ -210,15 +210,90 @@ def test_temperature_tiles_use_animated_thermal_gauges(
         )
     )
 
-    grid.tile_batt.set_value(40.0, animate=False)
-    assert grid.tile_batt.gauge.celsius == 40.0
-    assert 0.45 <= grid.tile_batt.gauge.level <= 0.55
-
-    grid.tile_batt.set_value(100.0, animate=False)
-    assert grid.tile_batt.gauge.level == 1.0
+    for value, expected in (
+        (-2.0, 0.0),
+        (0.0, 0.0),
+        (40.0, 0.4),
+        (100.0, 1.0),
+        (125.0, 1.0),
+    ):
+        grid.tile_batt.set_value(value, animate=False)
+        assert grid.tile_batt.gauge.celsius == value
+        assert grid.tile_batt.gauge.level == pytest.approx(expected)
 
     grid.tile_batt.set_value(None, animate=False)
     assert grid.tile_batt.gauge.level == 0.0
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_temperature_palette_has_five_theme_aware_bands() -> None:
+    try:
+        theme.set_color_scheme("dark")
+        dark = [
+            QColor(theme.temp_color(value))
+            for value in (10.0, 35.0, 57.0, 72.0, 90.0)
+        ]
+        assert len({color.name() for color in dark}) == 5
+        assert theme.temp_color(None) == theme.FG_TERTIARY
+
+        theme.set_color_scheme("light")
+        light = [
+            QColor(theme.temp_color(value))
+            for value in (10.0, 35.0, 57.0, 72.0, 90.0)
+        ]
+        assert [color.name() for color in light] != [
+            color.name() for color in dark
+        ]
+    finally:
+        theme.set_color_scheme("dark")
+
+
+def test_temperature_value_text_follows_current_band(
+    qapp: QApplication,
+) -> None:
+    grid = TempGridCard()
+    tile = grid.tile_batt
+    tile.set_value(72.0, animate=False)
+
+    expected = QColor(theme.temp_color(72.0)).name()
+    assert expected in tile.value_label.styleSheet().lower()
+
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_temperature_gauge_is_neutral_without_sensor_data(
+    qapp: QApplication,
+) -> None:
+    grid = TempGridCard()
+    grid.tile_batt.set_value(None, animate=False)
+    image = grid.tile_batt.gauge.grab().toImage()
+    neutral = image.pixelColor(17, 20)
+
+    assert neutral.name() == QColor(theme.BG_INPUT).name()
+
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_temperature_column_uses_current_band_color_at_exact_level(
+    qapp: QApplication,
+) -> None:
+    grid = TempGridCard()
+    gauge = grid.tile_batt.gauge
+    samples = {}
+
+    for value in (25.0, 72.0):
+        grid.tile_batt.set_value(value, animate=False)
+        assert gauge.level == pytest.approx(value / 100.0)
+        image = gauge.grab().toImage()
+        samples[value] = image.pixelColor(17, 66)
+
+    assert samples[25.0].hue() != samples[72.0].hue()
+    assert samples[25.0].green() > samples[25.0].red()
+    assert samples[72.0].red() > samples[72.0].blue()
+
     grid.deleteLater()
     qapp.processEvents()
 
@@ -326,6 +401,21 @@ def test_secondary_pages_use_shared_control_roles(
     qapp.processEvents()
 
 
+def test_passthrough_uses_three_standalone_cards(
+    qapp: QApplication,
+) -> None:
+    panel = PassthroughPanel()
+
+    assert panel.objectName() == "passthroughLayout"
+    assert panel.bridge_panel.objectName() == "card"
+    assert panel.tx_panel.objectName() == "card"
+    assert panel.rx_panel.objectName() == "card"
+    assert panel.layout().contentsMargins().left() == 0
+
+    panel.deleteLater()
+    qapp.processEvents()
+
+
 def test_elevated_card_palette_is_not_near_black() -> None:
     assert QColor(theme.BG_CARD).value() >= 48
 
@@ -358,6 +448,29 @@ def test_motor_mode_has_glow_and_buttons_use_translucent_surfaces(
     assert effect.blurRadius() >= 10
     assert card.buttons["REV"].inactive_surface_alpha < 255
     assert card.buttons["FWD"].active_surface_alpha < 255
+    card.deleteLater()
+    qapp.processEvents()
+
+
+def test_motor_mode_badge_fill_follows_active_mode(
+    qapp: QApplication,
+) -> None:
+    card = MotorCard()
+    card.setFixedSize(650, 410)
+    card.show()
+    qapp.processEvents()
+    samples = {}
+    for mode in ("FWD", "WAKE", "BRAKE"):
+        card.update_state(mode, 0, 0, 0)
+        qapp.processEvents()
+        image = card.mode_badge.grab().toImage()
+        samples[mode] = image.pixelColor(18, 18)
+
+    assert samples["FWD"].green() > samples["FWD"].red()
+    assert samples["WAKE"].red() > samples["WAKE"].blue()
+    assert samples["BRAKE"].red() > samples["BRAKE"].green()
+    assert len({color.name() for color in samples.values()}) == 3
+
     card.deleteLater()
     qapp.processEvents()
 

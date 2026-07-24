@@ -16,6 +16,11 @@ QFrame#rootContainer {
     border-radius: 0;
 }
 
+QFrame#passthroughLayout {
+    background: transparent;
+    border: none;
+}
+
 /* ---- 状态栏 (默认隐藏) ---- */
 QStatusBar {
     background: {{BG_OUTER}};
@@ -99,7 +104,17 @@ QLabel#connectionBadge {
     background: {{BG_CARD}};
     border: {{BORDER_WIDTH}}px solid {{BORDER_LIGHT}};
     border-radius: {{CONTROL_RADIUS}}px;
-    padding-left: 10px;
+    padding-left: {{SERIAL_BADGE_TEXT_INSET}}px;
+    letter-spacing: 1px;
+}
+
+QLabel#toolbarLabel {
+    color: {{FG_PRIMARY}};
+    background: transparent;
+    border: none;
+    font-family: "{{FONT_DISPLAY}}";
+    font-size: 13px;
+    font-weight: 700;
     letter-spacing: 1px;
 }
 

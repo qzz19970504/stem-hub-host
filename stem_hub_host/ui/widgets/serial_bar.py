@@ -97,6 +97,9 @@ class _ChevronCombo(QComboBox):
 
 
 class _DotLabel(QLabel):
+    DOT_CENTER_X = theme.SERIAL_DOT_CENTER_X
+    TEXT_LEFT_INSET = theme.SERIAL_BADGE_TEXT_INSET
+
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
         self.dot_color = STATE_OFFLINE
@@ -119,9 +122,17 @@ class _DotLabel(QLabel):
         halo = QColor(color)
         halo.setAlpha(theme.EFFECT_HALO_ALPHA)
         p.setBrush(halo)
-        p.drawEllipse(QPointF(13, self.height() / 2), 6.5, 6.5)
+        p.drawEllipse(
+            QPointF(self.DOT_CENTER_X, self.height() / 2),
+            6.5,
+            6.5,
+        )
         p.setBrush(QColor(color))
-        p.drawEllipse(QPointF(13, self.height() / 2), 3.5, 3.5)
+        p.drawEllipse(
+            QPointF(self.DOT_CENTER_X, self.height() / 2),
+            3.5,
+            3.5,
+        )
 
 
 class SerialBar(QWidget):
@@ -134,12 +145,15 @@ class SerialBar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("serialBar")
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(64)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setFixedSize(
+            theme.SERIAL_HEADER_WIDTH,
+            theme.SERIAL_HEADER_HEIGHT,
+        )
 
         # 全部左对齐, 不放 stretch
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 14, 0, 14)
+        lay.setContentsMargins(0, 4, 0, 4)
         lay.setSpacing(12)
 
         # 端口下拉 — 宽度与电池卡近似 (card width / 3 - spacing)
@@ -160,7 +174,7 @@ class SerialBar(QWidget):
             theme.SERIAL_CONTROL_HEIGHT,
         )
         badge_font = QFont(theme.FONT_DISPLAY)
-        badge_font.setPointSize(13)
+        badge_font.setPointSize(theme.SERIAL_CONTROL_FONT_SIZE)
         badge_font.setBold(True)
         self.status_badge.setFont(badge_font)
         lay.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -173,14 +187,11 @@ class SerialBar(QWidget):
             theme.SERIAL_CONTROL_HEIGHT,
         )
         button_font = QFont(theme.FONT_DISPLAY)
-        button_font.setPointSize(14)
+        button_font.setPointSize(theme.SERIAL_CONTROL_FONT_SIZE)
         button_font.setBold(True)
         self.connect_btn.setFont(button_font)
         self.connect_btn.clicked.connect(self._on_connect_clicked)
         lay.addWidget(self.connect_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        # 弹性空间推右侧 (让左侧 3 控件靠左对齐)
-        lay.addStretch(1)
 
         self.refresh_ports()
         self._set_connection_state(STATE_OFFLINE, "OFFLINE")

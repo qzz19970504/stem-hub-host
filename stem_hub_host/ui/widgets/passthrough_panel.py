@@ -64,7 +64,8 @@ class PassthroughPanel(QFrame):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setObjectName("card")
+        self.setObjectName("passthroughLayout")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._tx_bytes = 0
         self._rx_bytes = 0
         self._tx_buffer = bytearray()
@@ -72,12 +73,12 @@ class PassthroughPanel(QFrame):
         self._auto_scroll = True
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(18, 16, 18, 16)
-        outer.setSpacing(14)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(theme.GRID_GAP)
 
         # 桥接模式 — 与全局按钮语言一致的 segmented chips。
         self.bridge_panel = QFrame(self)
-        self.bridge_panel.setObjectName("toolbarPanel")
+        self.bridge_panel.setObjectName("card")
         bridge_row = QHBoxLayout(self.bridge_panel)
         bridge_row.setContentsMargins(14, 10, 14, 10)
         bridge_row.setSpacing(8)
@@ -116,7 +117,7 @@ class PassthroughPanel(QFrame):
 
         # 发送
         self.tx_panel = QFrame(self)
-        self.tx_panel.setObjectName("subPanel")
+        self.tx_panel.setObjectName("card")
         tx_col = QVBoxLayout(self.tx_panel)
         tx_col.setContentsMargins(14, 14, 14, 14)
         tx_col.setSpacing(10)
@@ -159,7 +160,7 @@ class PassthroughPanel(QFrame):
 
         # 接收
         self.rx_panel = QFrame(self)
-        self.rx_panel.setObjectName("subPanel")
+        self.rx_panel.setObjectName("card")
         rx_col = QVBoxLayout(self.rx_panel)
         rx_col.setContentsMargins(14, 14, 14, 14)
         rx_col.setSpacing(10)

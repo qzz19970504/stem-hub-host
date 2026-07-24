@@ -37,6 +37,13 @@ def test_console_grid_keeps_two_row_composition(console_tab: ConsoleTab) -> None
     assert console_tab.grid.indexOf(console_tab.at_console) >= 0
 
 
+def test_console_page_contains_only_the_two_by_three_grid(
+    console_tab: ConsoleTab,
+) -> None:
+    assert console_tab.layout().count() == 1
+    assert console_tab.layout().itemAt(0).layout() is console_tab.grid
+
+
 def test_console_cards_do_not_bias_target_column_ratio(
     console_tab: ConsoleTab,
 ) -> None:

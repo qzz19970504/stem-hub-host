@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFrame,
@@ -45,20 +46,50 @@ class PlotTab(QWidget):
         title.setObjectName("sectionTitle")
         toolbar.addWidget(title)
         toolbar.addSpacing(10)
-        toolbar.addWidget(QLabel("SAMPLE RATE"))
+        self.sample_rate_label = QLabel("SAMPLE RATE")
+        self.sample_rate_label.setObjectName("toolbarLabel")
+        label_font = QFont(theme.FONT_DISPLAY)
+        label_font.setPointSize(13)
+        label_font.setBold(True)
+        self.sample_rate_label.setFont(label_font)
+        toolbar.addWidget(
+            self.sample_rate_label,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
         self.hz_spin = QDoubleSpinBox()
         self.hz_spin.setObjectName("sampleRateControl")
         self.hz_spin.setFixedWidth(140)
+        self.hz_spin.setFixedHeight(theme.TOOLBAR_CONTROL_HEIGHT)
+        spin_font = QFont(theme.FONT_MONO)
+        spin_font.setPointSize(12)
+        self.hz_spin.setFont(spin_font)
         self.hz_spin.setDecimals(1)
         self.hz_spin.setRange(0.2, 1.0)
         self.hz_spin.setSingleStep(0.2)
         self.hz_spin.setValue(1.0)
         self.hz_spin.setSuffix(" Hz")
-        toolbar.addWidget(self.hz_spin)
+        toolbar.addWidget(
+            self.hz_spin,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
 
         self.clear_btn = QPushButton("CLEAR DATA")
         self.clear_btn.setObjectName("secondaryAction")
-        toolbar.addWidget(self.clear_btn)
+        self.clear_btn.setFixedSize(
+            theme.TOOLBAR_ACTION_WIDTH,
+            theme.TOOLBAR_CONTROL_HEIGHT,
+        )
+        action_font = QFont(theme.FONT_DISPLAY)
+        action_font.setPointSize(13)
+        action_font.setBold(True)
+        self.clear_btn.setFont(action_font)
+        toolbar.addWidget(
+            self.clear_btn,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
 
         toolbar.addStretch(1)
 

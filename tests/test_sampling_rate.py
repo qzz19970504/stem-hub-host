@@ -9,6 +9,7 @@ from stem_hub_host.data_buffer import DataBuffer
 from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
 from stem_hub_host.ui.main_window import MainWindow
+from stem_hub_host.ui import theme
 from stem_hub_host.ui.tab2_plot import PlotTab
 from stem_hub_host.ui.widgets.plot_widget import PlotWidget
 
@@ -23,6 +24,22 @@ def test_sample_rate_control_exposes_only_slow_range() -> None:
     assert tab.hz_spin.singleStep() == pytest.approx(0.2)
     assert tab.hz_spin.decimals() == 1
     assert tab.hz_spin.value() == pytest.approx(1.0)
+
+
+def test_chart_toolbar_uses_explicit_typography_and_aligned_controls() -> None:
+    get_app()
+    tab = PlotTab(DataBuffer())
+
+    assert tab.sample_rate_label.objectName() == "toolbarLabel"
+    assert tab.sample_rate_label.font().family() == theme.FONT_DISPLAY
+    assert tab.clear_btn.font().family() == theme.FONT_DISPLAY
+    assert tab.hz_spin.font().family() == theme.FONT_MONO
+    assert {
+        tab.hz_spin.height(),
+        tab.clear_btn.height(),
+    } == {theme.TOOLBAR_CONTROL_HEIGHT}
+
+    tab.deleteLater()
 
 
 def test_controller_maps_supported_rates_to_intervals() -> None:

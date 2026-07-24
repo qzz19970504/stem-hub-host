@@ -37,7 +37,7 @@ class ThermalGauge(QWidget):
     """Compact vertical gauge whose fill follows the sensor value."""
 
     RENDER_SCALE = 3
-    MIN_CELSIUS = -20.0
+    MIN_CELSIUS = 0.0
     MAX_CELSIUS = 100.0
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -133,30 +133,21 @@ class ThermalGauge(QWidget):
                 inner.width(),
                 fill_height,
             )
-            gradient = QLinearGradient(
+            active_spectrum = QLinearGradient(
                 fill_rect.left(),
                 fill_rect.bottom(),
                 fill_rect.left(),
                 fill_rect.top(),
             )
             color = QColor(self._color)
-            gradient.setColorAt(0.0, color.darker(118))
-            gradient.setColorAt(1.0, color)
+            active_spectrum.setColorAt(0.0, color.darker(116))
+            active_spectrum.setColorAt(1.0, color.lighter(106))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(gradient)
+            painter.setBrush(active_spectrum)
             painter.drawRoundedRect(
                 fill_rect,
                 inner.width() / 2,
                 inner.width() / 2,
-            )
-
-            surface = QColor(color)
-            surface.setAlpha(theme.EFFECT_GLOW_ALPHA)
-            painter.setBrush(surface)
-            painter.drawEllipse(
-                QPointF(inner.center().x(), fill_rect.top()),
-                inner.width() * 0.72,
-                inner.width() * 0.72,
             )
 
         painter.setPen(QPen(
@@ -259,7 +250,7 @@ class TempTile(QFrame):
         else:
             self.value_label.setText(f"{celsius:.1f}°C")
             self.value_label.setStyleSheet(
-                f"color: {theme.FG_PRIMARY};"
+                f"color: {theme.temp_color(celsius)};"
                 " background: transparent;"
             )
         self.gauge.set_value(celsius, animate=animate)

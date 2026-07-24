@@ -13,13 +13,16 @@ from PySide6.QtWidgets import (
 )
 
 from ..at_protocol import cmd_query_diag, cmd_query_sense
+from ..branding import APP_DISPLAY_NAME, load_app_icon
 from ..controller import Controller
+from . import native_chrome
 from .stylesheet import apply_to
 from .tab1_console import ConsoleTab
 from .tab2_plot import PlotTab
 from .tab3_passthrough import PassthroughTab
 from . import theme
 from .widgets.battery_card import parse_celsius, parse_volts
+from .widgets.serial_bar import SerialBar
 from .widgets.theme_toggle import ThemeToggleButton
 
 
@@ -61,7 +64,8 @@ class MainWindow(QMainWindow):
         self._normal_geometry = None
         self._was_maximized_before_fullscreen = False
 
-        self.setWindowTitle("stem-hub host v0.1")
+        self.setWindowTitle(APP_DISPLAY_NAME)
+        self.setWindowIcon(load_app_icon())
 
         self.setMinimumSize(theme.WINDOW_MIN_WIDTH, theme.WINDOW_MIN_HEIGHT)
         self.setMaximumSize(QT_WIDGET_SIZE_LIMIT, QT_WIDGET_SIZE_LIMIT)
@@ -91,6 +95,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.console_tab, "CONSOLE")
         self.tabs.addTab(self.plot_tab, "CHARTS")
         self.tabs.addTab(self.passthrough_tab, "PASSTHROUGH")
+        self.serial_bar = SerialBar(self.tabs)
+        self.console_tab.serial_bar = self.serial_bar
         self.theme_toggle = ThemeToggleButton(self.color_scheme, self.tabs)
         self.theme_toggle.scheme_changed.connect(self.set_color_scheme)
         root_lay.addWidget(self.tabs)
@@ -99,11 +105,9 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self._position_theme_toggle)
 
         # ---- UI signal -> Controller ----
-        self.console_tab.open_serial.connect(self._on_open_serial)
-        self.console_tab.close_serial.connect(self._on_close_serial)
-        self.console_tab.refresh_serial.connect(
-            self.console_tab.serial_bar.refresh_ports
-        )
+        self.serial_bar.open_requested.connect(self._on_open_serial)
+        self.serial_bar.close_requested.connect(self._on_close_serial)
+        self.serial_bar.refresh_requested.connect(self.serial_bar.refresh_ports)
         self.console_tab.motor_cmd.connect(self._controller.set_motor)
         self.console_tab.toggle_changed.connect(self._on_toggle_changed)
         self.console_tab.charge_card.all_off_clicked.connect(
@@ -148,6 +152,7 @@ class MainWindow(QMainWindow):
 
         from ..app import get_app
         apply_to(get_app())
+        QTimer.singleShot(0, self._apply_native_title_bar)
 
         # 初始: 未连接 → 所有交互禁用
         self._apply_handshake_gate(connected=False)
@@ -162,6 +167,7 @@ class MainWindow(QMainWindow):
         self.theme_toggle.set_color_scheme(scheme)
         from ..app import get_app
         apply_to(get_app())
+        native_chrome.apply_windows_title_bar(self, scheme)
 
         for widget in self.findChildren(QWidget):
             refresh = getattr(widget, "refresh_theme", None)
@@ -171,6 +177,11 @@ class MainWindow(QMainWindow):
         self._refresh_ui_from_state()
         if persist:
             self._appearance_settings.setValue("appearance/colorScheme", scheme)
+
+    def _apply_native_title_bar(self) -> None:
+        """Synchronize the Windows caption after its native handle exists."""
+
+        native_chrome.apply_windows_title_bar(self, self.color_scheme)
 
     def toggle_fullscreen(self) -> None:
         """Toggle fullscreen while restoring the previous normal window state."""
@@ -201,7 +212,10 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def eventFilter(self, watched, event) -> bool:  # type: ignore[override]
-        if watched is self.tabs and event.type() == QEvent.Type.Resize:
+        if (
+            watched in (self.tabs, self.tabs.tabBar())
+            and event.type() == QEvent.Type.Resize
+        ):
             self._position_theme_toggle()
             return super().eventFilter(watched, event)
 
@@ -217,12 +231,33 @@ class MainWindow(QMainWindow):
         return super().eventFilter(watched, event)
 
     def _position_theme_toggle(self) -> None:
-        """Keep the theme control inside the visible tab header."""
+        """Place persistent serial and theme controls in the tab header."""
 
-        if not hasattr(self, "theme_toggle"):
+        if not hasattr(self, "theme_toggle") or not hasattr(self, "serial_bar"):
             return
-        x = max(0, self.tabs.width() - self.theme_toggle.width() - 18)
-        self.theme_toggle.move(x, 8)
+        tab_bar = self.tabs.tabBar()
+        toggle_x = max(
+            0,
+            self.tabs.width() - self.theme_toggle.width() - theme.PAGE_MARGIN_X,
+        )
+        serial_x = (
+            toggle_x
+            - theme.SERIAL_HEADER_GAP
+            - self.serial_bar.width()
+        )
+        header_height = max(tab_bar.height(), theme.SERIAL_HEADER_HEIGHT)
+        serial_y = max(
+            0,
+            (header_height - self.serial_bar.height()) // 2,
+        )
+        toggle_y = max(
+            0,
+            (header_height - self.theme_toggle.height()) // 2,
+        )
+        self.serial_bar.move(serial_x, serial_y)
+        self.theme_toggle.move(toggle_x, toggle_y)
+        self.serial_bar.show()
+        self.serial_bar.raise_()
         self.theme_toggle.raise_()
 
     # ---- 握手门禁 ----
@@ -274,7 +309,7 @@ class MainWindow(QMainWindow):
     # ---- 串口 ----
     def _on_open_serial(self, port: str, baud: int) -> None:
         if not self._controller.open(port, baud):
-            self.console_tab.serial_bar.set_disconnected()
+            self.serial_bar.set_disconnected()
             self.console_tab.at_console.append_error(f"Open failed: {port}")
             QMessageBox.warning(
                 self,
@@ -360,11 +395,11 @@ class MainWindow(QMainWindow):
         self.console_tab.charge_card.clear_controls()
 
     def _on_worker_connected(self, port: str, baud: int) -> None:
-        self.console_tab.serial_bar.set_connected(port, baud)
+        self.serial_bar.set_connected(port, baud)
         self.console_tab.at_console.append_info(f"Opened: {port} @ {baud}")
 
     def _on_worker_disconnected(self) -> None:
-        self.console_tab.serial_bar.set_disconnected()
+        self.serial_bar.set_disconnected()
         self.console_tab.at_console.append_info("Disconnected")
         self.console_tab.battery_card.update_from_sense(None)
         self.console_tab.temp_grid.update_from_sense(None)
@@ -377,7 +412,7 @@ class MainWindow(QMainWindow):
 
     def _on_response(self, cmd: str, resp) -> None:
         if cmd.strip().startswith("AT+VERSION?") and resp.version is not None:
-            self.console_tab.serial_bar.set_handshake_ok(resp.version.version)
+            self.serial_bar.set_handshake_ok(resp.version.version)
             self.console_tab.at_console.append_info(f"Handshake OK: fw {resp.version.version}")
             self._apply_handshake_gate(connected=True)
             return

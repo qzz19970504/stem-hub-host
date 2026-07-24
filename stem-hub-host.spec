@@ -26,6 +26,10 @@ datas = [
         str(PROJECT_ROOT / "stem_hub_host" / "resources" / "fonts"),
         "stem_hub_host/resources/fonts",
     ),
+    (
+        str(PROJECT_ROOT / "stem_hub_host" / "resources" / "icons"),
+        "stem_hub_host/resources/icons",
+    ),
 ]
 
 # 隐式 import (确保所有 widget 模块都被收集)
@@ -36,6 +40,7 @@ hiddenimports = [
     "PySide6.QtSerialPort",
     "PySide6.QtNetwork",
     "stem_hub_host.app",
+    "stem_hub_host.branding",
     "stem_hub_host.at_protocol",
     "stem_hub_host.controller",
     "stem_hub_host.data_buffer",
@@ -45,6 +50,7 @@ hiddenimports = [
     "stem_hub_host.serial_worker",
     "stem_hub_host.transport",
     "stem_hub_host.ui.main_window",
+    "stem_hub_host.ui.native_chrome",
     "stem_hub_host.ui.fonts",
     "stem_hub_host.ui.stylesheet",
     "stem_hub_host.ui.tab1_console",
@@ -107,5 +113,11 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=str(
+        PROJECT_ROOT
+        / "stem_hub_host"
+        / "resources"
+        / "icons"
+        / "app_icon.ico"
+    ),
 )

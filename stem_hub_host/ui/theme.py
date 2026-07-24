@@ -17,9 +17,17 @@ COLUMN_STRETCH_LEFT = 100
 COLUMN_STRETCH_CENTER = 126
 COLUMN_STRETCH_RIGHT = 100
 SERIAL_COMBO_WIDTH = 235
-SERIAL_BADGE_WIDTH = 115
-SERIAL_BUTTON_WIDTH = 146
+SERIAL_BADGE_WIDTH = 140
+SERIAL_BUTTON_WIDTH = 140
 SERIAL_CONTROL_HEIGHT = 36
+SERIAL_HEADER_HEIGHT = 44
+SERIAL_HEADER_WIDTH = 539
+SERIAL_HEADER_GAP = 18
+SERIAL_DOT_CENTER_X = 14
+SERIAL_BADGE_TEXT_INSET = 34
+SERIAL_CONTROL_FONT_SIZE = 13
+TOOLBAR_CONTROL_HEIGHT = 40
+TOOLBAR_ACTION_WIDTH = 126
 SWITCH_WIDTH = 60
 SWITCH_HEIGHT = 36
 SWITCH_KNOB_SIZE = 28
@@ -119,6 +127,11 @@ SWITCH_KNOB_TOP = "#FFFFFF"
 SWITCH_KNOB_BOTTOM = "#DDE7F0"
 SWITCH_KNOB_BORDER = "#C3D0DC"
 SWITCH_SHADOW = "#000000"
+TEMP_COLD = "#4F8FA8"
+TEMP_NORMAL = "#3FAF9E"
+TEMP_WARM = "#A88942"
+TEMP_WARNING = "#B96737"
+TEMP_DANGER = "#C7504B"
 
 
 _DARK_PALETTE = {
@@ -173,6 +186,11 @@ _DARK_PALETTE = {
     "SWITCH_KNOB_BOTTOM": "#DDE7F0",
     "SWITCH_KNOB_BORDER": "#C3D0DC",
     "SWITCH_SHADOW": "#000000",
+    "TEMP_COLD": "#4F8FA8",
+    "TEMP_NORMAL": "#3FAF9E",
+    "TEMP_WARM": "#A88942",
+    "TEMP_WARNING": "#B96737",
+    "TEMP_DANGER": "#C7504B",
 }
 
 _LIGHT_PALETTE = {
@@ -227,6 +245,11 @@ _LIGHT_PALETTE = {
     "SWITCH_KNOB_BOTTOM": "#E8EEF3",
     "SWITCH_KNOB_BORDER": "#9FB2C2",
     "SWITCH_SHADOW": "#284155",
+    "TEMP_COLD": "#267994",
+    "TEMP_NORMAL": "#168C7F",
+    "TEMP_WARM": "#8E6A21",
+    "TEMP_WARNING": "#A95122",
+    "TEMP_DANGER": "#B83F3B",
 }
 
 _COLOR_SCHEME = "dark"
@@ -246,17 +269,13 @@ def set_color_scheme(scheme: str) -> None:
 def color_scheme() -> str:
     return _COLOR_SCHEME
 
-# ---- 温度 ----
-TEMP_COLD = "#5EEAD4"
-TEMP_NORMAL = ACCENT
-TEMP_WARM = "#D29922"
-TEMP_HOT = "#F85149"
-
 # ---- Sensor policy ----
 BATTERY_EMPTY_V = 28.0
 BATTERY_FULL_V = 37.0
 BATTERY_WARN_V = 30.0
 BATTERY_DANGER_V = 29.0
+TEMP_COOL_C = 20.0
+TEMP_NORMAL_MAX_C = 50.0
 TEMP_WARN_C = 65.0
 TEMP_DANGER_C = 80.0
 
@@ -274,13 +293,51 @@ def battery_ratio(volts: float | None) -> float:
 def temp_color(celsius: float | None) -> str:
     if celsius is None:
         return FG_TERTIARY
-    if celsius < 0:
+    if celsius < TEMP_COOL_C:
         return TEMP_COLD
-    if celsius < TEMP_WARN_C:
+    if celsius < TEMP_NORMAL_MAX_C:
         return TEMP_NORMAL
-    if celsius < TEMP_DANGER_C:
+    if celsius < TEMP_WARN_C:
         return TEMP_WARM
-    return TEMP_HOT
+    if celsius < TEMP_DANGER_C:
+        return TEMP_WARNING
+    return TEMP_DANGER
+
+
+def temperature_stops() -> tuple[tuple[float, str], ...]:
+    """Return fixed 0–100°C spectrum stops in normalized coordinates."""
+
+    return (
+        (0.0, TEMP_COLD),
+        (0.20, TEMP_COLD),
+        (0.50, TEMP_NORMAL),
+        (0.65, TEMP_WARM),
+        (0.80, TEMP_WARNING),
+        (1.0, TEMP_DANGER),
+    )
+
+
+def blend_hex(background: str, foreground: str, alpha: float) -> str:
+    """Blend two opaque #RRGGBB colors without coupling theme tokens to Qt."""
+
+    alpha = max(0.0, min(1.0, float(alpha)))
+    bg = tuple(int(background[index:index + 2], 16) for index in (1, 3, 5))
+    fg = tuple(int(foreground[index:index + 2], 16) for index in (1, 3, 5))
+    channels = tuple(
+        round(bg_channel * (1.0 - alpha) + fg_channel * alpha)
+        for bg_channel, fg_channel in zip(bg, fg)
+    )
+    return "#{:02X}{:02X}{:02X}".format(*channels)
+
+
+def mode_surface(color: str) -> tuple[str, str]:
+    """Build a subdued mode-colored banner surface for the active theme."""
+
+    strength = 0.24 if color_scheme() == "dark" else 0.14
+    return (
+        blend_hex(BG_ELEVATED, color, strength),
+        blend_hex(BG_CARD, color, strength * 0.55),
+    )
 
 
 # ---- 间距 ----

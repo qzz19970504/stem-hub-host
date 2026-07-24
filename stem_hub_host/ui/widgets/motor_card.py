@@ -197,8 +197,10 @@ class _ModeBadge(QFrame):
         lay.addStretch(1)
 
     def _apply_surface(self, border: str, *, active: bool) -> None:
-        start = theme.BG_ACCENT_SOFT if active else theme.BG_ELEVATED
-        end = theme.BG_ELEVATED if active else theme.BG_CARD
+        if active:
+            start, end = theme.mode_surface(border)
+        else:
+            start, end = theme.BG_ELEVATED, theme.BG_CARD
         self.setStyleSheet(
             "QFrame {"
             "  background: qlineargradient("

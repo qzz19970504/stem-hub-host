@@ -127,3 +127,24 @@ def test_theme_toggle_stays_inside_visible_tab_header(
     assert toggle_rect.right() <= main_window.tabs.width()
     assert toggle_rect.top() >= 0
     assert toggle_rect.bottom() < main_window.tabs.tabBar().height() + 8
+
+
+def test_serial_bar_is_one_persistent_global_header_control(
+    main_window: MainWindow,
+    qapp: QApplication,
+) -> None:
+    assert main_window.serial_bar.parentWidget() is main_window.tabs
+    assert main_window.console_tab.serial_bar is main_window.serial_bar
+
+    for page_index in range(main_window.tabs.count()):
+        main_window.tabs.setCurrentIndex(page_index)
+        qapp.processEvents()
+        assert main_window.serial_bar.isVisible()
+
+    serial_rect = main_window.serial_bar.geometry()
+    toggle_rect = main_window.theme_toggle.geometry()
+    last_tab_right = main_window.tabs.tabBar().tabRect(
+        main_window.tabs.count() - 1
+    ).right()
+    assert serial_rect.left() > last_tab_right
+    assert serial_rect.right() < toggle_rect.left()

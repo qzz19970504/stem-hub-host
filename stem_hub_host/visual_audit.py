@@ -26,6 +26,7 @@ from .ui.main_window import MainWindow
 TOOL_VERSION = 1
 FIXED_VIEW_SIZE = (1600, 900)
 FULLSCREEN_AUDIT_SIZE = (1920, 1080)
+CONSOLE_TEMPERATURES = (12.0, 36.0, 58.0, 84.0)
 
 
 @dataclass(frozen=True)
@@ -70,12 +71,13 @@ def _clear_console(window: MainWindow) -> None:
 
 def _seed_connected(window: MainWindow) -> None:
     controller = window._controller
+    batt_temp, ntc1_temp, ntc2_temp, ntc3_temp = CONSOLE_TEMPERATURES
     sense = SenseData(
-        batt_ntc="42.5C",
+        batt_ntc=f"{batt_temp:.1f}C",
         batt_v="37.0V",
-        ntc1_c="38.1C",
-        ntc2_c="51.2C",
-        ntc3_c="45.8C",
+        ntc1_c=f"{ntc1_temp:.1f}C",
+        ntc2_c=f"{ntc2_temp:.1f}C",
+        ntc3_c=f"{ntc3_temp:.1f}C",
         motor_i="14.2A",
         tick=12345,
         count=6789,
@@ -100,8 +102,10 @@ def _seed_connected(window: MainWindow) -> None:
     battery_ring.set_value(37.0, animate=False)
     battery_ring._glow_anim.stop()
     battery_ring._set_glow_phase(0.5)
-    temperatures = (42.5, 38.1, 51.2, 45.8)
-    for tile, value in zip(window.console_tab.temp_grid._tiles(), temperatures):
+    for tile, value in zip(
+        window.console_tab.temp_grid._tiles(),
+        CONSOLE_TEMPERATURES,
+    ):
         tile.set_value(value, animate=False)
 
     charge_card = window.console_tab.charge_card
