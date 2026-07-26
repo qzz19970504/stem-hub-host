@@ -16,6 +16,7 @@ from stem_hub_host.at_protocol import (
     cmd_query_motor,
     cmd_query_sense,
     cmd_raw,
+    iter_uart_tx_commands,
     cmd_set_lm51770,
     cmd_set_led,
     cmd_set_motor,
@@ -32,6 +33,7 @@ from stem_hub_host.models import (
     MotorState,
     SenseData,
     VersionInfo,
+    UartRxFrame,
 )
 
 
@@ -88,6 +90,17 @@ class TestCommandBuilders:
     def test_cmd_raw_preserves_intermediate(self):
         # 解析器不允许中间空格, 但 raw 不强制改, 留给固件报错
         assert cmd_raw("AT + FOO = BAR") == "AT + FOO = BAR\r\n"
+
+    def test_uart_tx_chunks_are_binary_exact(self):
+        payload = bytes(range(32)) + b"\x00\xff\r\n"
+        assert list(iter_uart_tx_commands(payload)) == [
+            f"AT+UARTTX={bytes(range(32)).hex().upper()}\r\n",
+            "AT+UARTTX=00FF0D0A\r\n",
+        ]
+
+    def test_uart_tx_rejects_empty_payload(self):
+        with pytest.raises(ValueError):
+            list(iter_uart_tx_commands(b""))
 
 
 # ---- 响应解析 ----
@@ -150,12 +163,37 @@ class TestParsedResponse:
     def test_diag(self):
         line = (
             "+DIAG:RX_ISR=1,RX_BYTE=2,RX_OVERFLOW=0,RX_ERR=0,ORE=0,NE=0,FE=0,PE=0,"
-            "LINE_TOO_LONG=0,AT_LOOP=10,TX_CALL=5,TX_OK=5,TX_TIMEOUT=0,TX_ERR=0,UART_WDG=0"
+            "LINE_TOO_LONG=0,AT_LOOP=10,TX_CALL=5,TX_OK=5,TX_TIMEOUT=0,TX_ERR=0,"
+            "TX_BUSY=1,TX_STATE_PRE=2,TX_STATE_POST=3,TX_ERR_PRE=4,TX_ERR_POST=5,"
+            "TX_LAST_STATUS=6,SENSOR_LOOP=7,SENSOR_PUBLISH=8,SENSOR_LAST_PUBLISH_TICK=9,"
+            "SENSOR_ADC1_READ_FAIL=10,SENSOR_ADC2_READ_FAIL=11,UART2_RX_BYTE=12,"
+            "UART2_RX_OVERFLOW=13,UART3_RX_BYTE=14,UART3_RX_OVERFLOW=15"
         )
         r = ParsedResponse.parse(line)
         assert r.diag is not None
         assert r.diag.rx_isr == 1
         assert r.diag.at_loop == 10
+        assert r.diag.uart2_rx_byte == 12
+        assert r.diag.uart3_rx_overflow == 15
+
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            ("+UART2RX:000D0AFF", UartRxFrame(2, b"\x00\r\n\xff")),
+            ("+UART3RX:414243", UartRxFrame(3, b"ABC")),
+        ],
+    )
+    def test_uart_rx_event(self, line, expected):
+        r = ParsedResponse.parse(line)
+        assert r.uart_rx == expected
+        assert not r.is_passthrough
+
+    @pytest.mark.parametrize(
+        "line",
+        ["+UART2RX:", "+UART2RX:0", "+UART2RX:00ff", "+UART3RX:GG"],
+    )
+    def test_malformed_uart_rx_event_is_not_accepted(self, line):
+        assert ParsedResponse.parse(line).uart_rx is None
 
     def test_passthrough(self):
         r = ParsedResponse.parse("HELLO")

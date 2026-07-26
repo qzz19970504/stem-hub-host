@@ -78,27 +78,32 @@ def test_worker_raw_write_preserves_binary_bytes() -> None:
     assert transport.get_written() == b"\xff\x00\r\n"
 
 
-def test_worker_passthrough_receive_preserves_binary_line() -> None:
+def test_worker_uart_event_preserves_binary_payload() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     assert worker.open("FAKE0", 115200)
-    received = QSignalSpy(worker.passthrough_received)
+    received = QSignalSpy(worker.uart_rx_received)
 
-    transport.feed(b"\xff\x00\r\n")
+    transport.feed(b"+UART2RX:FF00\r\n")
 
-    assert bytes(received.at(0)[0]) == b"\xff\x00"
+    assert received.at(0)[0] == 2
+    assert bytes(received.at(0)[1]) == b"\xff\x00"
 
 
-def test_worker_raw_passthrough_emits_partial_binary_immediately() -> None:
+def test_uart_event_does_not_consume_pending_command() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     assert worker.open("FAKE0", 115200)
-    worker.set_passthrough_raw(True)
-    received = QSignalSpy(worker.passthrough_received)
+    responses = QSignalSpy(worker.response_received)
+    received = QSignalSpy(worker.uart_rx_received)
 
-    transport.feed(b"\xff\x00")
+    worker.send_command("AT+LED=ON\r\n")
+    transport.feed(b"+UART3RX:00FF\r\n")
+    assert responses.count() == 0
+    assert bytes(received.at(0)[1]) == b"\x00\xff"
 
-    assert bytes(received.at(0)[0]) == b"\xff\x00"
+    transport.feed(b"OK\r\n")
+    assert responses.at(0)[0] == "AT+LED=ON\r\n"
 
 
 def test_passthrough_text_adds_crlf_and_counts_only_after_confirmation() -> None:
@@ -118,16 +123,62 @@ def test_passthrough_text_adds_crlf_and_counts_only_after_confirmation() -> None
     assert panel.tx_edit.toPlainText() == ""
 
 
-def test_passthrough_hex_mode_appends_firmware_line_framing() -> None:
+def test_passthrough_hex_mode_sends_exact_bytes_and_accepts_lowercase() -> None:
     _app()
     panel = PassthroughPanel()
     panel.hex_mode_cb.setChecked(True)
-    panel.tx_edit.setPlainText("FF 00")
+    panel.tx_edit.setPlainText("ff 00")
     sent = QSignalSpy(panel.tx_requested)
 
     panel._on_send()
 
-    assert bytes(sent.at(0)[0]) == b"\xff\x00\r\n"
+    assert bytes(sent.at(0)[0]) == b"\xff\x00"
+
+
+def test_passthrough_chunks_wait_for_each_ack() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    assert worker.open("FAKE0", 115200)
+    controller._handshake_ok = True
+    controller._apply_passthrough_mode("uart2")
+    confirmed = QSignalSpy(controller.passthrough_tx_confirmed)
+    payload = bytes(range(32)) + b"\xff"
+
+    assert controller.send_passthrough_bytes(payload)
+    first = f"AT+UARTTX={bytes(range(32)).hex().upper()}\r\n".encode()
+    assert transport.get_written() == first
+
+    transport.feed(b"+UART2RX:00\r\nOK\r\n")
+    assert transport.get_written() == first + b"AT+UARTTX=FF\r\n"
+    assert confirmed.at(0)[0] == 32
+
+    transport.feed(b"OK\r\n")
+    assert confirmed.at(1)[0] == 1
+
+
+def test_fake_firmware_bidirectional_tunnel_end_to_end() -> None:
+    _app()
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    firmware = FakeFirmware(worker)
+    assert worker.open("FAKE0", 115200)
+    controller._handshake_ok = True
+    received = QSignalSpy(worker.uart_rx_received)
+    confirmed = QSignalSpy(controller.passthrough_tx_confirmed)
+
+    controller.set_passthrough("uart2")
+    QTest.qWait(40)
+    assert controller._passthrough_mode == "uart2"
+
+    assert controller.send_passthrough_bytes(b"\x00\xff")
+    QTest.qWait(30)
+
+    assert received.at(0)[0] == 2
+    assert bytes(received.at(0)[1]) == b"\x00\xff"
+    assert confirmed.at(0)[0] == 2
+    firmware.deleteLater()
 
 
 def test_plot_reset_removes_existing_curve_data() -> None:
@@ -341,7 +392,7 @@ def test_rapid_uart_mode_requests_are_serialized() -> None:
         b"AT+UART2=OFF\r\n"
         b"AT+UART3=ON\r\n"
     )
-    assert worker._passthrough_raw
+    assert not worker._passthrough_raw
 
 
 def test_raw_passthrough_blocks_at_commands_and_gates_main_controls() -> None:

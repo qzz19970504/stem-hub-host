@@ -122,7 +122,11 @@ class MainWindow(QMainWindow):
         self._controller.handshake_failed.connect(self._on_handshake_failed)
         self._controller.worker.response_received.connect(self._on_response)
         self._controller.worker.passthrough_received.connect(self._on_passthrough)
+        self._controller.worker.uart_rx_received.connect(self._on_uart_rx)
         self._controller.worker.at_data_received.connect(self._on_at_data)
+        self._controller.passthrough_tx_confirmed.connect(
+            self.passthrough_tab.panel.confirm_tx_sent
+        )
         self._controller.output_command_failed.connect(
             self._on_output_command_failed
         )
@@ -324,9 +328,7 @@ class MainWindow(QMainWindow):
         self._controller.send_raw(cmd)
 
     def _on_passthrough_tx(self, data: bytes) -> None:
-        if self._controller.send_passthrough_bytes(data):
-            self.passthrough_tab.panel.confirm_tx_sent(len(data))
-        else:
+        if not self._controller.send_passthrough_bytes(data):
             self._on_worker_error("Pass-through send failed: not connected")
 
     def _on_output_command_failed(
@@ -430,6 +432,11 @@ class MainWindow(QMainWindow):
         self.passthrough_tab.panel.feed_rx(data)
         display = data.decode("utf-8", errors="replace")
         self.console_tab.at_console.append_log("RX", f"[pass] {display}")
+
+    def _on_uart_rx(self, uart_index: int, data: bytes) -> None:
+        self.passthrough_tab.panel.feed_rx(data)
+        display = data.decode("utf-8", errors="replace")
+        self.console_tab.at_console.append_log("RX", f"[UART{uart_index}] {display}")
 
     def _refresh_ui_from_state(self) -> None:
         latest = self._controller.get_latest()

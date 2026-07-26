@@ -28,16 +28,21 @@ from PySide6.QtWidgets import (
 from .. import theme
 
 
-_HEX_CHARS = "0123456789ABCDEF"
-
-
 def text_to_bytes(s: str) -> bytes:
     """'AA BB CC' -> b'\\xaa\\xbb\\xcc' (允许空格 / '-' 分隔, 大小写无关)."""
-    cleaned = s.replace(",", " ").replace("-", " ")
-    cleaned = "".join(c for c in cleaned if c in _HEX_CHARS or c.isspace())
-    parts = cleaned.split()
+    compact = "".join(
+        character
+        for character in s
+        if not character.isspace() and character not in ",-"
+    )
+    if (
+        not compact
+        or len(compact) % 2
+        or any(character not in "0123456789abcdefABCDEF" for character in compact)
+    ):
+        return b""
     try:
-        return bytes(int(p, 16) for p in parts if p)
+        return bytes.fromhex(compact)
     except ValueError:
         return b""
 
@@ -231,7 +236,7 @@ class PassthroughPanel(QFrame):
 
     def _on_hex_mode_toggled(self, hex_mode: bool) -> None:
         if hex_mode:
-            self.tx_edit.setPlaceholderText("Hex 模式: AA BB CC DD ...（自动补 CRLF）")
+            self.tx_edit.setPlaceholderText("Hex 模式: AA BB CC DD ...（按原字节发送）")
         else:
             self.tx_edit.setPlaceholderText("文本模式: 直接输入文本")
 
@@ -246,7 +251,7 @@ class PassthroughPanel(QFrame):
             data = text.encode("utf-8")
         if not data:
             return
-        if not data.endswith(b"\r\n"):
+        if not is_hex and not data.endswith(b"\r\n"):
             data += b"\r\n"
         self.tx_requested.emit(data)
 

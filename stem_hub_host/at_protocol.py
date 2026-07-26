@@ -17,6 +17,7 @@ from .models import (
     FaultState,
     MotorState,
     SenseData,
+    UartRxFrame,
     VersionInfo,
 )
 
@@ -82,6 +83,15 @@ def cmd_set_uart23(on: bool) -> str:
     """同时开关 UART2 & 3."""
     return f"AT+UART2&3={'ON' if on else 'OFF'}{CRLF}"
 
+def iter_uart_tx_commands(payload: bytes, chunk_size: int = 32):
+    """Yield acknowledged, binary-safe UART tunnel commands."""
+    if not payload:
+        raise ValueError("UART tunnel payload must not be empty")
+    if chunk_size < 1 or chunk_size > 32:
+        raise ValueError("UART tunnel chunk size must be between 1 and 32")
+    for offset in range(0, len(payload), chunk_size):
+        yield f"AT+UARTTX={payload[offset:offset + chunk_size].hex().upper()}{CRLF}"
+
 
 def cmd_raw(text: str) -> str:
     """用户从 AT 输入框发送的任意命令, 自动补 CRLF 结尾.
@@ -109,6 +119,7 @@ class ParsedResponse:
     motor: Optional[MotorState] = None
     version: Optional[VersionInfo] = None
     diag: Optional[DiagInfo] = None
+    uart_rx: Optional[UartRxFrame] = None
     is_passthrough: bool = False  # 透传行 (非 AT 数据)
 
     @classmethod
@@ -140,6 +151,10 @@ class ParsedResponse:
             d = DiagInfo.parse(s)
             if d is not None:
                 return cls(raw_line=line, diag=d)
+        if s.startswith(("+UART2RX:", "+UART3RX:")):
+            frame = UartRxFrame.parse(s)
+            if frame is not None:
+                return cls(raw_line=line, uart_rx=frame)
         # 既不是 OK / ERROR 也不是 +XXX:  → 透传数据
         return cls(raw_line=line, is_passthrough=True)
 

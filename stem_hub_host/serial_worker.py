@@ -50,6 +50,7 @@ class SerialWorker(QObject):
 
     response_received = Signal(str, ParsedResponse)  # (command, response)
     passthrough_received = Signal(bytes)
+    uart_rx_received = Signal(int, bytes)
     at_data_received = Signal(str, ParsedResponse)  # (command, data response)
 
     def __init__(
@@ -132,12 +133,8 @@ class SerialWorker(QObject):
             timer.start(timeout_ms)
 
     def set_passthrough_raw(self, enabled: bool) -> None:
-        """Route received chunks directly while the firmware bridge owns UART1."""
-        enabled = bool(enabled)
-        if enabled == self._passthrough_raw:
-            return
-        self._passthrough_raw = enabled
-        self._splitter.reset()
+        """Compatibility shim; the framed tunnel always keeps line parsing active."""
+        self._passthrough_raw = False
 
     def _on_async_timeout(self, pending: _Pending) -> None:
         if pending.finished or pending not in self._pending:
@@ -227,9 +224,6 @@ class SerialWorker(QObject):
         data = self._transport.read_all()
         if not data:
             return
-        if self._passthrough_raw:
-            self.passthrough_received.emit(data)
-            return
         for raw_line in self._splitter.feed_raw(data):
             try:
                 line = raw_line.decode("utf-8")
@@ -243,6 +237,13 @@ class SerialWorker(QObject):
 
     def _handle_line(self, line: str, raw_line: bytes | None = None) -> None:
         resp = ParsedResponse.parse(line)
+
+        if resp.uart_rx is not None:
+            self.uart_rx_received.emit(
+                resp.uart_rx.uart_index,
+                resp.uart_rx.payload,
+            )
+            return
 
         if resp.is_passthrough:
             self.passthrough_received.emit(

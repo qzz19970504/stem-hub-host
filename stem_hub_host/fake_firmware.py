@@ -38,7 +38,7 @@ from .transport import FakeSerialTransport
 class FakeFirmware(QObject):
     """模拟固件行为."""
 
-    VERSION = "release-v2.1-fake"
+    VERSION = "release-v2.2-fake"
 
     def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -123,7 +123,12 @@ class FakeFirmware(QObject):
         elif cmd == "AT+DIAG?":
             payload = (
                 "+DIAG:RX_ISR=1,RX_BYTE=2,RX_OVERFLOW=0,RX_ERR=0,ORE=0,NE=0,FE=0,PE=0,"
-                "LINE_TOO_LONG=0,AT_LOOP=10,TX_CALL=5,TX_OK=5,TX_TIMEOUT=0,TX_ERR=0,UART_WDG=0"
+                "LINE_TOO_LONG=0,AT_LOOP=10,TX_CALL=5,TX_OK=5,TX_TIMEOUT=0,TX_ERR=0,"
+                "TX_BUSY=0,TX_STATE_PRE=0,TX_STATE_POST=0,TX_ERR_PRE=0,TX_ERR_POST=0,"
+                "TX_LAST_STATUS=0,SENSOR_LOOP=10,SENSOR_PUBLISH=10,"
+                "SENSOR_LAST_PUBLISH_TICK=1000,SENSOR_ADC1_READ_FAIL=0,"
+                "SENSOR_ADC2_READ_FAIL=0,UART2_RX_BYTE=0,UART2_RX_OVERFLOW=0,"
+                "UART3_RX_BYTE=0,UART3_RX_OVERFLOW=0"
                 + CRLF + "OK" + CRLF
             )
             transport.feed(payload.encode())
@@ -192,5 +197,22 @@ class FakeFirmware(QObject):
             self._uart2 = False
             self._uart3 = False
             transport.feed(b"OK" + CRLF.encode())
+        elif cmd.startswith("AT+UARTTX="):
+            value = cmd[len("AT+UARTTX="):]
+            if (
+                not value
+                or len(value) % 2
+                or len(value) > 64
+                or any(char not in "0123456789ABCDEF" for char in value)
+            ):
+                transport.feed(b"ERROR:HEX" + CRLF.encode())
+            elif not self._uart2 and not self._uart3:
+                transport.feed(b"ERROR:UART_DISABLED" + CRLF.encode())
+            else:
+                if self._uart2:
+                    transport.feed(f"+UART2RX:{value}{CRLF}".encode())
+                if self._uart3:
+                    transport.feed(f"+UART3RX:{value}{CRLF}".encode())
+                transport.feed(b"OK" + CRLF.encode())
         else:
             transport.feed(b"ERROR:PARSE" + CRLF.encode())

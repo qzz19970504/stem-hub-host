@@ -19,6 +19,7 @@ from .at_protocol import (
     cmd_query_fault,
     cmd_query_motor,
     cmd_query_sense,
+    iter_uart_tx_commands,
     cmd_set_lm51770,
     cmd_set_led,
     cmd_set_motor,
@@ -60,6 +61,7 @@ class Controller(QObject):
     charge_transition_changed = Signal(bool)
     passthrough_mode_changed = Signal(str)
     passthrough_transition_changed = Signal(bool)
+    passthrough_tx_confirmed = Signal(int)
 
     def __init__(
         self,
@@ -112,6 +114,8 @@ class Controller(QObject):
         self._all_outputs_off_queued = False
         self._passthrough_transition_active = False
         self._queued_passthrough_mode: str | None = None
+        self._passthrough_tx_queue: deque[tuple[str, int]] = deque()
+        self._passthrough_tx_active: tuple[str, int] | None = None
 
         # 周期拉取定时器
         self._sense_timer = QTimer(self)
@@ -470,7 +474,7 @@ class Controller(QObject):
 
     def _apply_passthrough_mode(self, mode: str) -> None:
         self._passthrough_mode = mode
-        self._worker.set_passthrough_raw(mode != "off")
+        self._worker.set_passthrough_raw(False)
         if (
             mode == "off"
             and not self._passthrough_transition_active
@@ -481,20 +485,35 @@ class Controller(QObject):
         self.passthrough_mode_changed.emit(mode)
 
     def send_passthrough_bytes(self, data: bytes) -> bool:
-        """Write exact passthrough bytes and report whether transport accepted them."""
+        """Queue exact bytes as acknowledged, binary-safe AT tunnel frames."""
         if (
             not self._is_open
             or not self._handshake_ok
             or self._passthrough_mode == "off"
             or self._passthrough_transition_active
+            or not data
         ):
             return False
+
+        offset = 0
+        for command in iter_uart_tx_commands(data):
+            chunk_length = min(32, len(data) - offset)
+            self._passthrough_tx_queue.append((command, chunk_length))
+            offset += chunk_length
+        self._send_next_passthrough_chunk()
+        return True
+
+    def _send_next_passthrough_chunk(self) -> None:
+        if self._passthrough_tx_active is not None or not self._passthrough_tx_queue:
+            return
+        item = self._passthrough_tx_queue.popleft()
+        self._passthrough_tx_active = item
         try:
-            self._worker.send_bytes(data)
-            return True
-        except SerialError as e:
-            self._on_worker_error(f"透传发送失败: {e}")
-            return False
+            self._worker.send_command(item[0])
+        except SerialError as error:
+            self._passthrough_tx_active = None
+            self._passthrough_tx_queue.clear()
+            self._on_worker_error(f"透传发送失败: {error}")
 
     def send_raw(self, cmd: str) -> None:
         """AT 输入框直接发, 不等回包."""
@@ -542,6 +561,8 @@ class Controller(QObject):
         self._passthrough_transition_active = False
         self._queued_passthrough_mode = None
         self._passthrough_mode = "off"
+        self._passthrough_tx_queue.clear()
+        self._passthrough_tx_active = None
         self._worker.set_passthrough_raw(False)
         if charge_was_active:
             self.charge_transition_changed.emit(False)
@@ -557,6 +578,20 @@ class Controller(QObject):
         pass
 
     def _on_response(self, cmd: str, resp) -> None:
+        if (
+            self._passthrough_tx_active is not None
+            and cmd == self._passthrough_tx_active[0]
+        ):
+            _, byte_count = self._passthrough_tx_active
+            self._passthrough_tx_active = None
+            if resp.error is not None:
+                self._passthrough_tx_queue.clear()
+                self._on_worker_error(f"透传发送失败: {resp.error.code}")
+            else:
+                self.passthrough_tx_confirmed.emit(byte_count)
+                self._send_next_passthrough_chunk()
+            return
+
         pending = self._pending_outputs.get(cmd)
         if pending:
             control, requested_state, on_success, on_failure = pending.popleft()

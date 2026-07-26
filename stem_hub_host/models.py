@@ -174,6 +174,32 @@ class MotorState:
 
 # ---- 诊断 ----
 @dataclass(frozen=True)
+class UartRxFrame:
+    """Binary bytes received by a bridged firmware UART."""
+
+    uart_index: int
+    payload: bytes
+
+    @classmethod
+    def parse(cls, line: str) -> "UartRxFrame | None":
+        line = line.strip()
+        for uart_index in (2, 3):
+            prefix = f"+UART{uart_index}RX:"
+            if not line.startswith(prefix):
+                continue
+            value = line[len(prefix):]
+            if (
+                not value
+                or len(value) % 2
+                or len(value) > 64
+                or any(char not in "0123456789ABCDEF" for char in value)
+            ):
+                return None
+            return cls(uart_index=uart_index, payload=bytes.fromhex(value))
+        return None
+
+
+@dataclass(frozen=True)
 class DiagInfo:
     """`+DIAG:RX_ISR=...` 响应 (12 个计数器)."""
 
@@ -191,7 +217,22 @@ class DiagInfo:
     tx_ok: int
     tx_timeout: int
     tx_err: int
-    uart_wdg: int
+    tx_busy: int = 0
+    tx_state_pre: int = 0
+    tx_state_post: int = 0
+    tx_err_pre: int = 0
+    tx_err_post: int = 0
+    tx_last_status: int = 0
+    sensor_loop: int = 0
+    sensor_publish: int = 0
+    sensor_last_publish_tick: int = 0
+    sensor_adc1_read_fail: int = 0
+    sensor_adc2_read_fail: int = 0
+    uart2_rx_byte: int = 0
+    uart2_rx_overflow: int = 0
+    uart3_rx_byte: int = 0
+    uart3_rx_overflow: int = 0
+    uart_wdg: int = 0
 
     @classmethod
     def parse(cls, line: str) -> "DiagInfo | None":
@@ -222,6 +263,23 @@ class DiagInfo:
                 tx_ok=int(fields.get("TX_OK", "0")),
                 tx_timeout=int(fields.get("TX_TIMEOUT", "0")),
                 tx_err=int(fields.get("TX_ERR", "0")),
+                tx_busy=int(fields.get("TX_BUSY", "0")),
+                tx_state_pre=int(fields.get("TX_STATE_PRE", "0")),
+                tx_state_post=int(fields.get("TX_STATE_POST", "0")),
+                tx_err_pre=int(fields.get("TX_ERR_PRE", "0")),
+                tx_err_post=int(fields.get("TX_ERR_POST", "0")),
+                tx_last_status=int(fields.get("TX_LAST_STATUS", "0")),
+                sensor_loop=int(fields.get("SENSOR_LOOP", "0")),
+                sensor_publish=int(fields.get("SENSOR_PUBLISH", "0")),
+                sensor_last_publish_tick=int(
+                    fields.get("SENSOR_LAST_PUBLISH_TICK", "0")
+                ),
+                sensor_adc1_read_fail=int(fields.get("SENSOR_ADC1_READ_FAIL", "0")),
+                sensor_adc2_read_fail=int(fields.get("SENSOR_ADC2_READ_FAIL", "0")),
+                uart2_rx_byte=int(fields.get("UART2_RX_BYTE", "0")),
+                uart2_rx_overflow=int(fields.get("UART2_RX_OVERFLOW", "0")),
+                uart3_rx_byte=int(fields.get("UART3_RX_BYTE", "0")),
+                uart3_rx_overflow=int(fields.get("UART3_RX_OVERFLOW", "0")),
                 uart_wdg=int(fields.get("UART_WDG", "0")),
             )
         except (KeyError, ValueError):
