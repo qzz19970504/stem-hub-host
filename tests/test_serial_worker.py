@@ -109,3 +109,27 @@ def test_invalid_utf8_is_reported_as_hex_not_passthrough(qapp):
     assert passthrough.count() == 0
     assert errors.count() == 1
     assert "FF FE" in errors.at(0)[0]
+
+
+def test_commands_are_written_one_at_a_time(qapp):
+    from PySide6.QtTest import QSignalSpy
+
+    from stem_hub_host.serial_worker import SerialWorker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    assert worker.open("FAKE0", 115200)
+    responses = QSignalSpy(worker.response_received)
+
+    worker.send_command("AT+SENSE?\r\n")
+    worker.send_command("AT+FAULT?\r\n")
+
+    assert transport.get_written() == b"AT+SENSE?\r\n"
+
+    transport.feed(b"+SENSE:BATT_NTC=20.0C\r\n")
+    assert transport.get_written() == b"AT+SENSE?\r\n"
+
+    transport.feed(b"OK\r\n")
+    assert responses.at(0)[0] == "AT+SENSE?\r\n"
+    assert transport.get_written() == b"AT+SENSE?\r\nAT+FAULT?\r\n"

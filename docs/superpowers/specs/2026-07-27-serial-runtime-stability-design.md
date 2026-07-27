@@ -58,7 +58,12 @@ damaged response into a visible disconnect/reconnect cycle.
    strongest response attribution but is a larger behavioral rewrite than the
    observed failures require.
 
-Approach 2 is selected.
+Approach 2 was selected initially. Real-device verification then proved that
+`Controller._poll_once` writing SENSE, FAULT, and MOTOR back-to-back reproduced
+the binary corruption with both QSerialPort and pyserial. Single-command
+pyserial stress remained clean. The host therefore also adopts the
+single-command scheduling part of approach 3, while retaining the bounded
+resynchronization from approach 2.
 
 ## MCU design
 
@@ -88,16 +93,20 @@ Approach 2 is selected.
   - discard incoming bytes until a 200 ms quiet interval has elapsed;
   - reject new commands during that short resynchronization interval.
 - Apply the same resynchronization boundary to synchronous handshake timeouts.
+- Queue every AT command in `SerialWorker` and physically write only the FIFO
+  head. Start its timeout when written, then write the next command only after
+  the current command receives terminal `OK` or `ERROR`. This prevents telemetry
+  polling and user control commands from overlapping MCU response transmission.
 
 ## Verification
 
 - Host regression tests prove malformed bytes never reach pass-through UI,
-  tunnel data is gated by confirmed mode, and asynchronous timeout keeps the
-  transport open while discarding a late response.
+  tunnel data is gated by confirmed mode, commands are physically serialized,
+  and asynchronous timeout keeps the transport open while discarding a late
+  response.
 - MCU builds with the bundled Cube CMake/GNU toolchain.
 - Flash the resulting ELF using the connected ST-Link.
 - Run repeated AT query traffic and inject wrong-baud/noise traffic.
 - Verify the MCU remains responsive, `RX_ERR` can increase without a
   `+FAIL:H=` frame, and the host remains connected.
 - Capture final task stack high-water marks with AT diagnostics and/or GDB.
-

@@ -44,6 +44,8 @@ pytest, pyserial, STM32Cube command-line tools.
 
 - [ ] Add a 200 ms resynchronization timer and reject commands while it is
   active.
+- [ ] Make the worker FIFO single-flight: only write its head, start timeout
+  accounting when it is written, and advance after terminal `OK` or `ERROR`.
 - [ ] On timeout, dispose every pending timer, clear the FIFO, emit
   `ParsedResponse(error=AtError("TIMEOUT"))` for abandoned commands, reset the
   splitter, drain RX, and start the quiet timer without closing the transport.
@@ -99,4 +101,3 @@ pytest, pyserial, STM32Cube command-line tools.
 - [ ] Merge each fix branch into its original branch without including unrelated
   working-tree changes.
 - [ ] Verify the merged tips and final repository statuses.
-

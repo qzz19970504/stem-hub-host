@@ -40,8 +40,10 @@ class SerialTimeout(SerialError):
 @dataclass
 class _Pending:
     command: str
+    timeout_ms: int = 0
     on_data: Optional[ParsedResponse] = None
     finished: bool = False
+    has_been_sent: bool = False
     timeout_timer: Optional[QTimer] = None
 
 
@@ -140,19 +142,13 @@ class SerialWorker(QObject):
     def send_command(self, cmd: str, timeout_ms: int = 1000) -> None:
         """Queue an AT command so its eventual OK/ERROR keeps attribution."""
         self._ensure_command_can_be_sent()
-        pending = _Pending(command=cmd)
+        pending = _Pending(command=cmd, timeout_ms=timeout_ms)
         self._pending.append(pending)
         try:
-            self.send_only(cmd)
+            self._start_next_pending()
         except SerialError:
             self._pending.remove(pending)
             raise
-        if timeout_ms > 0:
-            timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.timeout.connect(lambda: self._on_async_timeout(pending))
-            pending.timeout_timer = timer
-            timer.start(timeout_ms)
 
     def set_passthrough_raw(self, enabled: bool) -> None:
         """Compatibility shim; the framed tunnel always keeps line parsing active."""
@@ -185,7 +181,7 @@ class SerialWorker(QObject):
         pending = _Pending(command=cmd)
         self._pending.append(pending)
         try:
-            self.send_only(cmd)
+            self._start_next_pending()
         except SerialError:
             self._pending.remove(pending)
             raise
@@ -297,19 +293,41 @@ class SerialWorker(QObject):
                 resp.version = data.version or resp.version
                 resp.diag = data.diag or resp.diag
             cur.finished = True
+            while self._pending and self._pending[0].finished:
+                self._pending.popleft()
             self.response_received.emit(cur.command, resp)
+            try:
+                self._start_next_pending()
+            except SerialError as error:
+                self.error_occurred.emit(f"串口发送队列失败: {error}")
+                self.close()
         elif resp.sense or resp.fault or resp.motor or resp.version or resp.diag:
             cur.on_data = resp
             self.at_data_received.emit(cur.command, resp)
-
-        while self._pending and self._pending[0].finished:
-            self._pending.popleft()
 
     def _ensure_command_can_be_sent(self) -> None:
         if not self._is_open:
             raise SerialError("串口未打开")
         if self._is_resynchronizing:
             raise SerialError("串口协议正在重新同步")
+
+    def _start_next_pending(self) -> None:
+        if not self._pending:
+            return
+        pending = self._pending[0]
+        if pending.finished or pending.has_been_sent:
+            return
+
+        self.send_only(pending.command)
+        pending.has_been_sent = True
+        if pending.timeout_ms <= 0:
+            return
+
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._on_async_timeout(pending))
+        pending.timeout_timer = timer
+        timer.start(pending.timeout_ms)
 
     def _begin_resynchronization(self, timed_out_command: str) -> None:
         if not self._is_open:
