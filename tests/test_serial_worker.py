@@ -90,3 +90,22 @@ def test_timeout(fake_pair):
     fw._handle_cmd = lambda cmd: None  # noqa: E731 — 让 firmware 不响应
     with pytest.raises(SerialTimeout):
         worker.send_and_wait("AT+VERSION?\r\n", timeout_ms=100)
+
+
+def test_invalid_utf8_is_reported_as_hex_not_passthrough(qapp):
+    from PySide6.QtTest import QSignalSpy
+
+    from stem_hub_host.serial_worker import SerialWorker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    assert worker.open("FAKE0", 115200)
+    passthrough = QSignalSpy(worker.passthrough_received)
+    errors = QSignalSpy(worker.error_occurred)
+
+    transport.feed(b"\xff\xfe\r\n")
+
+    assert passthrough.count() == 0
+    assert errors.count() == 1
+    assert "FF FE" in errors.at(0)[0]

@@ -429,14 +429,28 @@ class MainWindow(QMainWindow):
             self.console_tab.charge_card.update_fault(drv=resp.fault.drv, aux=resp.fault.aux)
 
     def _on_passthrough(self, data: bytes) -> None:
+        if self._controller.passthrough_mode == "off":
+            return
         self.passthrough_tab.panel.feed_rx(data)
-        display = data.decode("utf-8", errors="replace")
+        display = self._format_serial_payload(data)
         self.console_tab.at_console.append_log("RX", f"[pass] {display}")
 
     def _on_uart_rx(self, uart_index: int, data: bytes) -> None:
+        if self._controller.passthrough_mode == "off":
+            return
         self.passthrough_tab.panel.feed_rx(data)
-        display = data.decode("utf-8", errors="replace")
+        display = self._format_serial_payload(data)
         self.console_tab.at_console.append_log("RX", f"[UART{uart_index}] {display}")
+
+    @staticmethod
+    def _format_serial_payload(data: bytes) -> str:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data.hex(" ").upper()
+        if all(character.isprintable() or character in "\r\n\t" for character in text):
+            return text
+        return data.hex(" ").upper()
 
     def _refresh_ui_from_state(self) -> None:
         latest = self._controller.get_latest()

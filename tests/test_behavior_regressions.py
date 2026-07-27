@@ -429,7 +429,10 @@ def test_completed_async_commands_release_timeout_timers() -> None:
     for _ in range(20):
         worker.send_command("AT+LED=OFF\r\n")
         transport.feed(b"OK\r\n")
-    assert worker.findChildren(QTimer) == []
+    assert [
+        timer.objectName()
+        for timer in worker.findChildren(QTimer)
+    ] == ["serialResynchronizationTimer"]
 
 
 def test_controller_level_errors_reach_terminal_once() -> None:
@@ -449,15 +452,48 @@ def test_controller_level_errors_reach_terminal_once() -> None:
     app.processEvents()
 
 
-def test_async_command_timeout_disconnects_to_resynchronize_fifo() -> None:
+def test_async_command_timeout_resynchronizes_without_disconnecting() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     assert worker.open("FAKE0", 115200)
+    responses = QSignalSpy(worker.response_received)
 
     worker.send_command("AT+NO-REPLY\r\n", timeout_ms=40)
     QTest.qWait(80)
 
-    assert not worker.is_open()
+    assert worker.is_open()
+    assert responses.count() == 1
+    assert responses.at(0)[0] == "AT+NO-REPLY\r\n"
+    assert responses.at(0)[1].error.code == "TIMEOUT"
+
+    transport.feed(b"OK\r\n")
+    QTest.qWait(240)
+    assert responses.count() == 1
+
+    worker.send_command("AT+LED=OFF\r\n")
+    transport.feed(b"OK\r\n")
+    assert responses.count() == 2
+    assert responses.at(1)[0] == "AT+LED=OFF\r\n"
+
+
+def test_uart_event_does_not_pollute_passthrough_page_while_disabled() -> None:
+    app = _app()
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    window = MainWindow(controller)
+
+    window._on_uart_rx(2, b"\xff\x00")
+
+    assert window.passthrough_tab.panel._rx_bytes == 0
+
+    controller._apply_passthrough_mode("uart2")
+    window._on_uart_rx(2, b"\xff\x00")
+
+    assert window.passthrough_tab.panel._rx_bytes == 2
+    assert "FF 00" in window.console_tab.at_console.log_view.toPlainText()
+    window.close()
+    app.processEvents()
 
 
 def test_fast_reconnect_cancels_stale_delayed_handshake() -> None:

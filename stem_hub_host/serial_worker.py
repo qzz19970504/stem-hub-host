@@ -22,7 +22,11 @@ from typing import Deque, Optional
 from PySide6.QtCore import QEventLoop, QObject, QTimer, Signal
 
 from .at_protocol import LineSplitter, ParsedResponse
+from .models import AtError
 from .transport import RealSerialTransport, Transport
+
+
+RESYNCHRONIZATION_QUIET_MS = 200
 
 
 class SerialError(Exception):
@@ -66,6 +70,15 @@ class SerialWorker(QObject):
         self._port_name = ""
         self._baudrate = 0
         self._passthrough_raw = False
+        self._is_resynchronizing = False
+        self._resynchronization_timer = QTimer(self)
+        self._resynchronization_timer.setObjectName(
+            "serialResynchronizationTimer"
+        )
+        self._resynchronization_timer.setSingleShot(True)
+        self._resynchronization_timer.timeout.connect(
+            self._finish_resynchronization
+        )
 
         # 连接信号
         self._transport.ready_read.connect(self._on_ready_read)
@@ -80,6 +93,9 @@ class SerialWorker(QObject):
     def is_open(self) -> bool:
         return self._is_open
 
+    def is_resynchronizing(self) -> bool:
+        return self._is_resynchronizing
+
     def open(self, port_name: str, baudrate: int = 115200) -> bool:
         if self._is_open:
             self.close()
@@ -93,6 +109,8 @@ class SerialWorker(QObject):
         self._baudrate = baudrate
         self._splitter.reset()
         self._pending.clear()
+        self._resynchronization_timer.stop()
+        self._is_resynchronizing = False
         self.connected.emit(port_name, baudrate)
         return True
 
@@ -103,6 +121,9 @@ class SerialWorker(QObject):
             self._transport.close()
             self._is_open = False
             self._pending.clear()
+            self._resynchronization_timer.stop()
+            self._is_resynchronizing = False
+            self._splitter.reset()
             self.disconnected.emit()
 
     def send_only(self, cmd: str) -> None:
@@ -118,6 +139,7 @@ class SerialWorker(QObject):
 
     def send_command(self, cmd: str, timeout_ms: int = 1000) -> None:
         """Queue an AT command so its eventual OK/ERROR keeps attribution."""
+        self._ensure_command_can_be_sent()
         pending = _Pending(command=cmd)
         self._pending.append(pending)
         try:
@@ -139,10 +161,7 @@ class SerialWorker(QObject):
     def _on_async_timeout(self, pending: _Pending) -> None:
         if pending.finished or pending not in self._pending:
             return
-        self.error_occurred.emit(
-            f"命令响应超时，串口已断开以重新同步: {pending.command!r}"
-        )
-        self.close()
+        self._begin_resynchronization(pending.command)
 
     @staticmethod
     def _dispose_timeout_timer(pending: _Pending) -> None:
@@ -161,8 +180,7 @@ class SerialWorker(QObject):
         返回的 ParsedResponse 优先包含 data 行 (+XXX:...) 的字段;
         如果只有 OK 行, 则只设 ok=True. 如果是 ERROR, error 不为 None.
         """
-        if not self._is_open:
-            raise SerialError("串口未打开")
+        self._ensure_command_can_be_sent()
 
         pending = _Pending(command=cmd)
         self._pending.append(pending)
@@ -217,6 +235,7 @@ class SerialWorker(QObject):
 
         if "resp" in captured:
             return captured["resp"]
+        self._begin_resynchronization(cmd)
         raise SerialTimeout(f"等待响应超时 ({timeout_ms}ms): {cmd!r}")
 
     # ---- 内部 ----
@@ -224,11 +243,18 @@ class SerialWorker(QObject):
         data = self._transport.read_all()
         if not data:
             return
+        if self._is_resynchronizing:
+            self._splitter.reset()
+            self._resynchronization_timer.start(
+                RESYNCHRONIZATION_QUIET_MS
+            )
+            return
         for raw_line in self._splitter.feed_raw(data):
             try:
                 line = raw_line.decode("utf-8")
             except UnicodeDecodeError:
-                line = raw_line.decode("latin-1")
+                self._report_protocol_warning(raw_line)
+                continue
             self._handle_line(line, raw_line)
 
     def _on_port_error(self) -> None:
@@ -246,9 +272,10 @@ class SerialWorker(QObject):
             return
 
         if resp.is_passthrough:
-            self.passthrough_received.emit(
+            unrecognized = (
                 raw_line if raw_line is not None else line.encode("utf-8")
             )
+            self._report_protocol_warning(unrecognized)
             return
 
         cur = None
@@ -277,3 +304,45 @@ class SerialWorker(QObject):
 
         while self._pending and self._pending[0].finished:
             self._pending.popleft()
+
+    def _ensure_command_can_be_sent(self) -> None:
+        if not self._is_open:
+            raise SerialError("串口未打开")
+        if self._is_resynchronizing:
+            raise SerialError("串口协议正在重新同步")
+
+    def _begin_resynchronization(self, timed_out_command: str) -> None:
+        if not self._is_open:
+            return
+
+        abandoned = list(self._pending)
+        self._pending.clear()
+        self._is_resynchronizing = True
+        self._splitter.reset()
+        self._transport.read_all()
+        self._resynchronization_timer.start(RESYNCHRONIZATION_QUIET_MS)
+
+        for pending in abandoned:
+            self._dispose_timeout_timer(pending)
+            pending.finished = True
+
+        self.error_occurred.emit(
+            "命令响应超时，串口保持连接并等待重新同步: "
+            f"{timed_out_command!r}"
+        )
+        for pending in abandoned:
+            response = ParsedResponse(
+                raw_line="",
+                error=AtError(code="TIMEOUT"),
+            )
+            self.response_received.emit(pending.command, response)
+
+    def _finish_resynchronization(self) -> None:
+        self._splitter.reset()
+        self._is_resynchronizing = False
+
+    def _report_protocol_warning(self, raw_line: bytes) -> None:
+        hexadecimal = raw_line.hex(" ").upper() or "<EMPTY>"
+        self.error_occurred.emit(
+            f"收到无法识别的串口数据，已丢弃: {hexadecimal}"
+        )

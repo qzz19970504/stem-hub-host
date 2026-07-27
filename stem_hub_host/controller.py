@@ -160,6 +160,10 @@ class Controller(QObject):
     def sense_hz(self) -> float:
         return self._sense_hz
 
+    @property
+    def passthrough_mode(self) -> str:
+        return self._passthrough_mode
+
     def set_sense_hz(self, hz: float) -> None:
         self._sense_hz = normalize_sense_hz(hz)
         self._apply_sense_interval()
@@ -195,9 +199,12 @@ class Controller(QObject):
             or self._passthrough_transition_active
         ):
             return
-        self._worker.send_command(cmd_query_sense())
-        self._worker.send_command(cmd_query_fault())
-        self._worker.send_command(cmd_query_motor())
+        try:
+            self._worker.send_command(cmd_query_sense())
+            self._worker.send_command(cmd_query_fault())
+            self._worker.send_command(cmd_query_motor())
+        except SerialError as error:
+            self._on_worker_error(f"状态查询暂停: {error}")
 
     # ---- 用户操作: 命令下发 ----
     def set_motor(self, mode: str) -> None:
@@ -674,7 +681,12 @@ class Controller(QObject):
                 self._schedule_handshake_retry("TIMEOUT")
         except SerialError as e:
             if self._connection_attempt_active and self._is_open:
-                self._schedule_handshake_retry(str(e))
+                reason = (
+                    "TIMEOUT"
+                    if self._worker.is_resynchronizing()
+                    else str(e)
+                )
+                self._schedule_handshake_retry(reason)
 
     def _schedule_handshake_retry(self, reason: str) -> None:
         if not self._connection_attempt_active or not self._is_open:
