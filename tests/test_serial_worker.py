@@ -133,3 +133,51 @@ def test_commands_are_written_one_at_a_time(qapp):
     transport.feed(b"OK\r\n")
     assert responses.at(0)[0] == "AT+SENSE?\r\n"
     assert transport.get_written() == b"AT+SENSE?\r\nAT+FAULT?\r\n"
+
+
+def test_sync_timeout_starts_when_queued_command_is_written(qapp):
+    from PySide6.QtCore import QTimer
+
+    from stem_hub_host.serial_worker import SerialWorker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    assert worker.open("FAKE0", 115200)
+
+    worker.send_command("AT+LED=ON\r\n", timeout_ms=500)
+    QTimer.singleShot(80, lambda: transport.feed(b"OK\r\n"))
+    QTimer.singleShot(100, lambda: transport.feed(b"OK\r\n"))
+
+    response = worker.send_and_wait("AT+LED=OFF\r\n", timeout_ms=50)
+
+    assert response.ok
+    assert transport.get_written() == b"AT+LED=ON\r\nAT+LED=OFF\r\n"
+
+
+def test_sync_waiter_uses_pending_identity_for_identical_commands(qapp):
+    from PySide6.QtCore import QTimer
+
+    from stem_hub_host.serial_worker import SerialWorker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    assert worker.open("FAKE0", 115200)
+    command = "AT+VERSION?\r\n"
+
+    worker.send_command(command, timeout_ms=500)
+    QTimer.singleShot(
+        20,
+        lambda: transport.feed(b"+VERSION:first\r\nOK\r\n"),
+    )
+    QTimer.singleShot(
+        40,
+        lambda: transport.feed(b"+VERSION:second\r\nOK\r\n"),
+    )
+
+    response = worker.send_and_wait(command, timeout_ms=200)
+
+    assert response.version is not None
+    assert response.version.version == "second"
+    assert transport.get_written() == command.encode() * 2

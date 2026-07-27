@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Deque, Optional
+from typing import Callable, Deque, Optional
 
 from PySide6.QtCore import QEventLoop, QObject, QTimer, Signal
 
@@ -42,6 +42,8 @@ class _Pending:
     command: str
     timeout_ms: int = 0
     on_data: Optional[ParsedResponse] = None
+    completion_callback: Optional[Callable[[ParsedResponse], None]] = None
+    timeout_callback: Optional[Callable[[], None]] = None
     finished: bool = False
     has_been_sent: bool = False
     timeout_timer: Optional[QTimer] = None
@@ -178,7 +180,25 @@ class SerialWorker(QObject):
         """
         self._ensure_command_can_be_sent()
 
-        pending = _Pending(command=cmd)
+        loop = QEventLoop()
+        captured: dict[str, ParsedResponse] = {}
+        did_timeout = False
+
+        def _on_completed(response: ParsedResponse) -> None:
+            captured["response"] = response
+            loop.quit()
+
+        def _on_timeout() -> None:
+            nonlocal did_timeout
+            did_timeout = True
+            loop.quit()
+
+        pending = _Pending(
+            command=cmd,
+            timeout_ms=timeout_ms,
+            completion_callback=_on_completed,
+            timeout_callback=_on_timeout,
+        )
         self._pending.append(pending)
         try:
             self._start_next_pending()
@@ -186,52 +206,11 @@ class SerialWorker(QObject):
             self._pending.remove(pending)
             raise
 
-        loop = QEventLoop()
-        timer = QTimer()
-        timer.setSingleShot(True)
-        captured: dict[str, ParsedResponse] = {}
-
-        def _on_data(command: str, response: ParsedResponse) -> None:
-            # data 行先到: 暂存到 pending.on_data (handler 已经做了),
-            # 但要捕获以便 response_received 时合并
-            if command == cmd:
-                captured["data"] = response
-
-        def _on_response(command: str, response: ParsedResponse) -> None:
-            if command == cmd and "resp" not in captured:
-                # 把 data 行的字段 merge 到 response 上
-                if "data" in captured and response.ok:
-                    d = captured["data"]
-                    response.sense = d.sense or response.sense
-                    response.fault = d.fault or response.fault
-                    response.motor = d.motor or response.motor
-                    response.version = d.version or response.version
-                    response.diag = d.diag or response.diag
-                captured["resp"] = response
-                loop.quit()
-
-        def _on_timeout() -> None:
-            loop.quit()
-
-        self.at_data_received.connect(_on_data)
-        self.response_received.connect(_on_response)
-        timer.timeout.connect(_on_timeout)
-        if timeout_ms > 0:
-            timer.start(timeout_ms)
-        try:
+        if "response" not in captured and not did_timeout:
             loop.exec()
-        finally:
-            self.at_data_received.disconnect(_on_data)
-            self.response_received.disconnect(_on_response)
-            timer.stop()
-            try:
-                self._pending.remove(pending)
-            except ValueError:
-                pass
 
-        if "resp" in captured:
-            return captured["resp"]
-        self._begin_resynchronization(cmd)
+        if "response" in captured:
+            return captured["response"]
         raise SerialTimeout(f"等待响应超时 ({timeout_ms}ms): {cmd!r}")
 
     # ---- 内部 ----
@@ -295,6 +274,8 @@ class SerialWorker(QObject):
             cur.finished = True
             while self._pending and self._pending[0].finished:
                 self._pending.popleft()
+            if cur.completion_callback is not None:
+                cur.completion_callback(resp)
             self.response_received.emit(cur.command, resp)
             try:
                 self._start_next_pending()
@@ -343,6 +324,8 @@ class SerialWorker(QObject):
         for pending in abandoned:
             self._dispose_timeout_timer(pending)
             pending.finished = True
+            if pending.timeout_callback is not None:
+                pending.timeout_callback()
 
         self.error_occurred.emit(
             "命令响应超时，串口保持连接并等待重新同步: "

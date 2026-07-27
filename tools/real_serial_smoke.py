@@ -75,8 +75,8 @@ def run(port_name: str, duration_seconds: float) -> None:
         failed_checks.append("passthrough_rx_bytes")
     if result["has_replacement_character"]:
         failed_checks.append("has_replacement_character")
-    if any("命令响应超时" in error for error in errors):
-        failed_checks.append("command_timeout")
+    if errors:
+        failed_checks.append("errors")
     if failed_checks:
         raise RuntimeError(f"real serial smoke failed: {failed_checks}")
 
