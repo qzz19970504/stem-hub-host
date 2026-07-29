@@ -27,8 +27,8 @@ from .widgets.theme_toggle import ThemeToggleButton
 
 
 CHARGE_TOGGLE_MAP = {
-    "CHARGE":    "charge",
-    "DISCHARGE": "discharge",
+    "CHARGE": "charge",
+    "DRIVE": "drive",
 }
 AUX_TOGGLE_MAP = {
     "NMOS1": "nmos1",

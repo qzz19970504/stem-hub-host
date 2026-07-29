@@ -15,15 +15,16 @@ from decimal import Decimal
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from .at_protocol import (
+    cmd_power_off,
     cmd_handshake,
     cmd_query_fault,
     cmd_query_motor,
     cmd_query_sense,
     iter_uart_tx_commands,
-    cmd_set_lm51770,
+    cmd_set_charge,
+    cmd_set_drive,
     cmd_set_led,
     cmd_set_motor,
-    cmd_set_mp4317,
     cmd_set_nmos,
     cmd_set_uart2,
     cmd_set_uart23,
@@ -218,15 +219,9 @@ class Controller(QObject):
     def set_nmos(self, idx: int, on: bool) -> None:
         self._send_output(cmd_set_nmos(idx, on), f"NMOS{idx}", on)
 
-    def set_mp4317(self, on: bool) -> None:
-        self._send_output(cmd_set_mp4317(on), "DISCHARGE", on)
-
-    def set_lm51770(self, on: bool) -> None:
-        self._send_output(cmd_set_lm51770(on), "CHARGE", on)
-
     def set_charge_mode(self, mode: str) -> None:
         """Serialize mutually exclusive charge-path changes."""
-        if mode not in {"charge", "discharge", "off"}:
+        if mode not in {"charge", "drive", "off"}:
             return
         if self._charge_transition_active:
             self._queued_charge_mode = mode
@@ -242,39 +237,23 @@ class Controller(QObject):
         if mode == "charge":
             self._run_charge_steps(
                 (
-                    (cmd_set_mp4317(False), "DISCHARGE", False),
-                    (cmd_set_lm51770(False), "CHARGE", False),
-                    (cmd_set_lm51770(True), "CHARGE", True),
+                    (cmd_set_charge(True), "CHARGE", True),
                 ),
                 target="CHARGE",
             )
-        elif mode == "discharge":
+        elif mode == "drive":
             self._run_charge_steps(
                 (
-                    (cmd_set_lm51770(False), "CHARGE", False),
-                    (cmd_set_mp4317(False), "DISCHARGE", False),
-                    (cmd_set_mp4317(True), "DISCHARGE", True),
+                    (cmd_set_drive(True), "DRIVE", True),
                 ),
-                target="DISCHARGE",
+                target="DRIVE",
             )
         else:
-            def send_mp_off() -> None:
-                self._send_output(
-                    cmd_set_mp4317(False),
-                    "DISCHARGE",
-                    False,
-                    on_success=self._finish_charge_transition,
-                    on_failure=lambda _reason: self._finish_charge_transition(),
-                    allow_charge_transition=True,
-                )
-
-            self._send_output(
-                cmd_set_lm51770(False),
-                "CHARGE",
-                False,
-                on_success=send_mp_off,
-                on_failure=lambda _reason: send_mp_off(),
-                allow_charge_transition=True,
+            self._run_charge_steps(
+                (
+                    (cmd_power_off(), "POWER", False),
+                ),
+                target="POWER",
             )
 
     def _run_charge_steps(
@@ -328,8 +307,7 @@ class Controller(QObject):
 
     def _run_all_outputs_off(self) -> None:
         steps = (
-            (cmd_set_lm51770(False), "CHARGE"),
-            (cmd_set_mp4317(False), "DISCHARGE"),
+            (cmd_power_off(), "POWER"),
             (cmd_set_nmos(1, False), "NMOS1"),
             (cmd_set_nmos(2, False), "NMOS2"),
             (cmd_set_led(False), "LIGHTS"),
@@ -387,7 +365,7 @@ class Controller(QObject):
             return
         if (
             self._charge_transition_active
-            and control in {"CHARGE", "DISCHARGE"}
+            and control in {"CHARGE", "DRIVE", "POWER"}
             and not allow_charge_transition
         ):
             return

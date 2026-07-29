@@ -241,7 +241,7 @@ def test_async_output_error_is_attributed_and_rolls_back_ui() -> None:
     app.processEvents()
 
 
-def test_charge_enable_waits_for_old_path_off_acknowledgement() -> None:
+def test_charge_mode_reports_atomic_command_failure() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
@@ -249,64 +249,50 @@ def test_charge_enable_waits_for_old_path_off_acknowledgement() -> None:
     failures = QSignalSpy(controller.output_command_failed)
 
     controller.set_charge_mode("charge")
-    assert transport.get_written() == b"AT+MP4317=OFF\r\n"
+    assert transport.get_written() == b"AT+CHARGE=ON\r\n"
 
     transport.feed(b"ERROR:OUTPUT_QUEUE\r\n")
 
-    assert b"AT+LM51770=ON" not in transport.get_written()
     assert [failures.at(i)[0:2] for i in range(failures.count())] == [
-        ["DISCHARGE", False],
         ["CHARGE", True],
     ]
+    assert not controller._charge_transition_active
 
 
-def test_charge_mode_resets_target_before_enabling() -> None:
+def test_charge_mode_uses_one_atomic_command() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
     assert worker.open("FAKE0", 115200)
 
     controller.set_charge_mode("charge")
-    assert transport.get_written() == b"AT+MP4317=OFF\r\n"
-
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+LM51770=OFF\r\n")
-
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+LM51770=ON\r\n")
+    assert transport.get_written() == b"AT+CHARGE=ON\r\n"
 
     transport.feed(b"OK\r\n")
     assert not controller._charge_transition_active
 
 
-def test_charge_mode_does_not_enable_after_target_reset_fails() -> None:
+def test_charge_off_uses_one_atomic_command() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
     assert worker.open("FAKE0", 115200)
 
-    controller.set_charge_mode("charge")
-    transport.feed(b"OK\r\n")
-    transport.feed(b"ERROR:OUTPUT_QUEUE\r\n")
+    controller.set_charge_mode("off")
+    assert transport.get_written() == b"AT+POWER=OFF\r\n"
 
-    assert b"AT+LM51770=ON\r\n" not in transport.get_written()
+    transport.feed(b"OK\r\n")
     assert not controller._charge_transition_active
 
 
-def test_discharge_mode_resets_target_before_enabling() -> None:
+def test_drive_mode_uses_one_atomic_command() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
     assert worker.open("FAKE0", 115200)
 
-    controller.set_charge_mode("discharge")
-    assert transport.get_written() == b"AT+LM51770=OFF\r\n"
-
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+MP4317=OFF\r\n")
-
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+MP4317=ON\r\n")
+    controller.set_charge_mode("drive")
+    assert transport.get_written() == b"AT+DRIVE=ON\r\n"
 
     transport.feed(b"OK\r\n")
     assert not controller._charge_transition_active
@@ -319,28 +305,16 @@ def test_rapid_charge_mode_requests_are_serialized() -> None:
     assert worker.open("FAKE0", 115200)
 
     controller.set_charge_mode("charge")
-    controller.set_charge_mode("discharge")
-    assert transport.get_written() == b"AT+MP4317=OFF\r\n"
+    controller.set_charge_mode("drive")
+    assert transport.get_written() == b"AT+CHARGE=ON\r\n"
 
     transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+LM51770=OFF\r\n")
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+LM51770=ON\r\n")
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+LM51770=OFF\r\n")
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+MP4317=OFF\r\n")
-    transport.feed(b"OK\r\n")
-    assert transport.get_written().endswith(b"AT+MP4317=ON\r\n")
+    assert transport.get_written().endswith(b"AT+DRIVE=ON\r\n")
     transport.feed(b"OK\r\n")
 
     assert transport.get_written() == (
-        b"AT+MP4317=OFF\r\n"
-        b"AT+LM51770=OFF\r\n"
-        b"AT+LM51770=ON\r\n"
-        b"AT+LM51770=OFF\r\n"
-        b"AT+MP4317=OFF\r\n"
-        b"AT+MP4317=ON\r\n"
+        b"AT+CHARGE=ON\r\n"
+        b"AT+DRIVE=ON\r\n"
     )
 
 
@@ -352,8 +326,7 @@ def test_all_outputs_off_waits_for_each_ack_in_safe_order() -> None:
 
     controller.set_all_outputs_off()
     expected_commands = (
-        b"AT+LM51770=OFF\r\n",
-        b"AT+MP4317=OFF\r\n",
+        b"AT+POWER=OFF\r\n",
         b"AT+NMOS1=OFF\r\n",
         b"AT+NMOS2=OFF\r\n",
         b"AT+LED=OFF\r\n",

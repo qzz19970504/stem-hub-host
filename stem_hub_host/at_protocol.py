@@ -63,12 +63,16 @@ def cmd_set_nmos(idx: int, on: bool) -> str:
     return f"AT+NMOS{idx}={'ON' if on else 'OFF'}{CRLF}"
 
 
-def cmd_set_mp4317(on: bool) -> str:
-    return f"AT+MP4317={'ON' if on else 'OFF'}{CRLF}"
+def cmd_set_charge(on: bool) -> str:
+    return f"AT+CHARGE={'ON' if on else 'OFF'}{CRLF}"
 
 
-def cmd_set_lm51770(on: bool) -> str:
-    return f"AT+LM51770={'ON' if on else 'OFF'}{CRLF}"
+def cmd_set_drive(on: bool) -> str:
+    return f"AT+DRIVE={'ON' if on else 'OFF'}{CRLF}"
+
+
+def cmd_power_off() -> str:
+    return f"AT+POWER=OFF{CRLF}"
 
 
 def cmd_set_uart2(on: bool) -> str:

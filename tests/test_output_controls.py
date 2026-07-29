@@ -47,7 +47,7 @@ def test_output_card_exposes_only_real_toggle_controls(
 ) -> None:
     assert set(output_card.control_names) == {
         "CHARGE",
-        "DISCHARGE",
+        "DRIVE",
         "NMOS1",
         "NMOS2",
         "LIGHTS",
@@ -78,7 +78,7 @@ def test_all_off_is_centered_below_the_five_output_switches(
     assert abs(all_off_center.x() - output_card.width() / 2) < 8
 
 
-def test_charge_closes_discharge_path_before_enabling_charge(
+def test_charge_and_drive_are_mutually_exclusive(
     window: MainWindow,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -92,7 +92,13 @@ def test_charge_closes_discharge_path_before_enabling_charge(
     window._on_toggle_changed("CHARGE", True)
 
     assert requested_modes == ["charge"]
-    assert not window.console_tab.charge_card.is_on("DISCHARGE")
+    assert not window.console_tab.charge_card.is_on("DRIVE")
+
+    window.console_tab.charge_card.set_toggle("CHARGE", True)
+    window._on_toggle_changed("DRIVE", True)
+
+    assert requested_modes == ["charge", "drive"]
+    assert not window.console_tab.charge_card.is_on("CHARGE")
 
 
 def test_all_off_closes_every_output_in_safe_order(
