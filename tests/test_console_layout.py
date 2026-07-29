@@ -115,6 +115,26 @@ def test_at_console_time_eviction_does_not_rebuild_document(
     qapp.processEvents()
 
 
+def test_at_console_multiline_entry_evicts_as_one_document_block(
+    qapp: QApplication,
+    monkeypatch,
+) -> None:
+    now = 1000.0
+    monkeypatch.setattr(time, "monotonic", lambda: now)
+    console = AtConsole()
+    console.append_log("RX", "old\r\ncontinuation")
+
+    assert console.log_view.document().blockCount() == 1
+
+    now += 181.0
+    console.append_log("RX", "new")
+
+    assert console.log_view.toPlainText() == "<< new"
+    assert console.log_view.document().blockCount() == 1
+    console.deleteLater()
+    qapp.processEvents()
+
+
 def test_at_console_caps_entries_and_qt_document_blocks(
     qapp: QApplication,
 ) -> None:
