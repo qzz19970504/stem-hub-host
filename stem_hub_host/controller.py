@@ -31,11 +31,13 @@ from .at_protocol import (
     cmd_set_uart3,
 )
 from .data_buffer import DataBuffer
+from .models import VersionInfo
 from .serial_worker import SerialError, SerialTimeout, SerialWorker
 
 
 SENSE_HZ_OPTIONS = (0.2, 0.4, 0.6, 0.8, 1.0)
 DEFAULT_SENSE_HZ = 1.0
+POWER_PROTOCOL_VERSION_PREFIX = "release-v3."
 
 
 def normalize_sense_hz(hz: float) -> float:
@@ -91,6 +93,7 @@ class Controller(QObject):
         self._latest_sense = None
         self._latest_motor = None
         self._confirmed_motor_mode: str | None = None
+        self._confirmed_power_mode = "off"
         self._latest_fault = None
         self._pending_outputs: dict[
             str,
@@ -156,6 +159,10 @@ class Controller(QObject):
     @property
     def is_handshake_ok(self) -> bool:
         return self._handshake_ok
+
+    @property
+    def confirmed_power_mode(self) -> str:
+        return self._confirmed_power_mode
 
     @property
     def sense_hz(self) -> float:
@@ -603,8 +610,16 @@ class Controller(QObject):
                 on_failure(resp.error.code)
             else:
                 on_success()
-        # 握手响应特殊处理
         stripped_cmd = cmd.strip()
+        if resp.error is None:
+            if stripped_cmd in {"AT+CHARGE=OFF", "AT+DRIVE=OFF", "AT+POWER=OFF"}:
+                self._confirmed_power_mode = "off"
+            elif stripped_cmd == "AT+CHARGE=ON":
+                self._confirmed_power_mode = "charge"
+            elif stripped_cmd == "AT+DRIVE=ON":
+                self._confirmed_power_mode = "drive"
+
+        # 握手响应特殊处理
         if stripped_cmd.startswith("AT+MOTOR="):
             requested_mode = stripped_cmd.partition("=")[2]
             if resp.error is not None:
@@ -617,7 +632,10 @@ class Controller(QObject):
                 self._confirmed_motor_mode = requested_mode
 
         if stripped_cmd.startswith("AT+VERSION?") and resp.version is not None:
-            self._complete_handshake()
+            if self._is_power_protocol_compatible(resp.version):
+                self._complete_handshake()
+            else:
+                self._reject_incompatible_version(resp.version)
             return
 
     def _on_at_data(self, cmd: str, resp) -> None:
@@ -645,15 +663,25 @@ class Controller(QObject):
             )
             if not self._connection_attempt_active:
                 return
-            if resp.version is not None:
+            if (
+                resp.version is not None
+                and self._is_power_protocol_compatible(resp.version)
+            ):
                 self._complete_handshake()
             else:
                 reason = (
-                    resp.error.code
-                    if resp.error is not None
-                    else "INVALID_VERSION"
+                    f"INCOMPATIBLE_VERSION:{resp.version.version}"
+                    if resp.version is not None
+                    else (
+                        resp.error.code
+                        if resp.error is not None
+                        else "INVALID_VERSION"
+                    )
                 )
-                self._schedule_handshake_retry(reason)
+                if resp.version is not None:
+                    self._reject_incompatible_version(resp.version)
+                else:
+                    self._schedule_handshake_retry(reason)
         except SerialTimeout:
             if self._connection_attempt_active:
                 self._schedule_handshake_retry("TIMEOUT")
@@ -671,6 +699,16 @@ class Controller(QObject):
             return
         self._last_handshake_error = reason
         self._handshake_retry_timer.start(self._handshake_retry_ms)
+
+    @staticmethod
+    def _is_power_protocol_compatible(version: VersionInfo) -> bool:
+        return version.version.startswith(POWER_PROTOCOL_VERSION_PREFIX)
+
+    def _reject_incompatible_version(self, version: VersionInfo) -> None:
+        self._last_handshake_error = (
+            f"INCOMPATIBLE_VERSION:{version.version}"
+        )
+        self._fail_connection_attempt()
 
     def _complete_handshake(self) -> None:
         if self._handshake_ok:

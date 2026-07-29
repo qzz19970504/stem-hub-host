@@ -478,7 +478,10 @@ def test_fast_reconnect_cancels_stale_delayed_handshake() -> None:
     assert worker.open("FAKE0", 115200)
     worker.close()
     assert worker.open("FAKE1", 115200)
-    QTimer.singleShot(240, lambda: transport.feed(b"+VERSION:test\r\nOK\r\n"))
+    QTimer.singleShot(
+        240,
+        lambda: transport.feed(b"+VERSION:release-v3.0\r\nOK\r\n"),
+    )
     QTest.qWait(320)
 
     assert transport.get_written().count(b"AT+VERSION?\r\n") == 1

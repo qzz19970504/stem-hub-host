@@ -117,6 +117,19 @@ def test_all_off_closes_every_output_in_safe_order(
     assert calls == [("all_outputs", False)]
 
 
+def test_power_off_failure_restores_confirmed_drive_without_key_error(
+    window: MainWindow,
+) -> None:
+    card = window.console_tab.charge_card
+    window._controller._confirmed_power_mode = "drive"
+    card.clear_controls()
+
+    window._on_output_command_failed("POWER", False, "OUTPUT_QUEUE")
+
+    assert not card.is_on("CHARGE")
+    assert card.is_on("DRIVE")
+
+
 def test_sensor_and_fault_data_drive_honest_indicators(window: MainWindow) -> None:
     window._controller._latest_sense = SenseData(
         batt_ntc="82.0C",

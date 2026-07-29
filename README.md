@@ -1,11 +1,13 @@
 # stem-hub 上位机
 
-STM32 `stem-hub` 固件的 Qt Python 上位机（PySide6）。功能详见固件仓的
+STM32 `stem-hub` 固件的 Qt Python 上位机（PySide6）。当前对应
+`release-v3.0` 固件；完整协议见本仓的
+[电源路径 AT 契约](docs/power-path-at-contract.md)和固件仓的
 [上位机AT命令文档](../stem-hub/上位机AT命令文档.md)。
 
 ## 功能
 
-- **控制台 (Tab 1)**：电池电量 / 温度 / NTC 框图，充放电模式切换，电机驱动状态 + 控制，NMOS1/2 与 MP4317/LM51770 开关，nFAULT/nFLT 状态，AT 指令输入框
+- **控制台 (Tab 1)**：电池电量 / 温度 / NTC 框图，CHARGE / DRIVE 互斥模式切换，电机驱动状态 + 控制，NMOS1/2、全关、nFAULT/nFLT 状态和 AT 指令输入框
 - **实时图表 (Tab 2)**：可调频率（默认 2 Hz）拉取 `AT+SENSE?` 滚动绘图，可选显示哪些量
 - **UART 透传 (Tab 3)**：UART2 / UART3 / 2&3 桥接开关 + 透传收发面板
 
@@ -77,13 +79,18 @@ stem-hub-host/
 
 ## 协议
 
-见固件仓 [上位机AT命令文档.md](../stem-hub/上位机AT命令文档.md)。
+当前电源路径的主机/固件契约见
+[docs/power-path-at-contract.md](docs/power-path-at-contract.md)，完整命令集见固件仓
+[上位机AT命令文档.md](../stem-hub/上位机AT命令文档.md)。
 
 简要：
+
 - 串口 UART1 = 115200 8N1，AT 命令必须大写、**无空格**、`\r\n` 结尾
-- 握手：`AT+VERSION?` → 收到 `+VERSION:...` + `OK` 即握手成功
-- 周期查询：`AT+SENSE?` 返回 `+SENSE:...` + `OK`
-- 控制命令单条发完等回包
+- 握手：`AT+VERSION?` → 只接受 `+VERSION:release-v3.x` + `OK`；v2.x 固件会以不兼容版本拒绝连接，避免新 UI 向旧协议发送无效电源命令
+- 电源模式仅发送一条命令：`AT+CHARGE=ON/OFF`、`AT+DRIVE=ON/OFF` 或 `AT+POWER=OFF`
+- `CHARGE=ON` 与 `DRIVE=ON` 由 MCU 执行“先全关、后单路打开”，上位机不再编排独立芯片命令
+- 周期查询：`AT+SENSE?` 返回 `+SENSE:...` + `OK`；五路传感 ADC 是最近五个完整成功采样周期的同步滑动均值
+- 控制命令单条发完等回包；旧的 `AT+LM51770` / `AT+MP4317` 指令会被固件拒绝
 
 ## 视觉回归
 

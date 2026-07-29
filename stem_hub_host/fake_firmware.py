@@ -30,7 +30,7 @@ from .transport import FakeSerialTransport
 class FakeFirmware(QObject):
     """模拟固件行为."""
 
-    VERSION = "release-v2.2-fake"
+    VERSION = "release-v3.0-fake"
 
     def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
         super().__init__(parent)

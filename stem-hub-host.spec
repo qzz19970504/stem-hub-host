@@ -63,7 +63,6 @@ hiddenimports = [
     "stem_hub_host.ui.widgets.fault_indicator",
     "stem_hub_host.ui.widgets.led_dot",
     "stem_hub_host.ui.widgets.motor_card",
-    "stem_hub_host.ui.widgets.nmos_card",
     "stem_hub_host.ui.widgets.passthrough_panel",
     "stem_hub_host.ui.widgets.plot_widget",
     "stem_hub_host.ui.widgets.serial_bar",

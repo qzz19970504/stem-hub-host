@@ -96,6 +96,7 @@ def test_power_modes_are_mutually_exclusive_in_fake_firmware(fake_pair):
     old_command = worker.send_and_wait("AT+LM51770=ON\r\n", timeout_ms=500)
     assert not old_command.ok
     assert old_command.error is not None
+    assert old_command.error.code == "PARSE"
 
 
 def test_error_response(fake_pair):

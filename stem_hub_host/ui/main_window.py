@@ -337,6 +337,20 @@ class MainWindow(QMainWindow):
         requested_state: bool,
         reason: str,
     ) -> None:
+        if control in {"CHARGE", "DRIVE", "POWER"}:
+            confirmed_mode = self._controller.confirmed_power_mode
+            self.console_tab.charge_card.set_toggle(
+                "CHARGE",
+                confirmed_mode == "charge",
+                animate=False,
+            )
+            self.console_tab.charge_card.set_toggle(
+                "DRIVE",
+                confirmed_mode == "drive",
+                animate=False,
+            )
+            return
+
         self.console_tab.charge_card.set_toggle(
             control,
             not requested_state,

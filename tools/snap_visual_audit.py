@@ -62,7 +62,7 @@ def _seed_console(window: MainWindow) -> None:
     controller._latest_fault = FaultState(drv=0, aux=0)
     window._refresh_ui_from_state()
     window.console_tab.battery_card.ring.set_value(37.0, animate=False)
-    window.console_tab.charge_card.set_toggle("DISCHARGE", True, animate=False)
+    window.console_tab.charge_card.set_toggle("DRIVE", True, animate=False)
     window.console_tab.charge_card.set_toggle("LIGHTS", True, animate=False)
 
     console = window.console_tab.at_console
@@ -70,7 +70,7 @@ def _seed_console(window: MainWindow) -> None:
     console.append_log("RX", "OK")
     console.append_log("TX", "AT+GET=VOLTAGE")
     console.append_log("RX", "37.0V")
-    console.append_info("handshake ok: firmware release-v2.1")
+    console.append_info("handshake ok: firmware release-v3.0")
 
 
 def main() -> None:
@@ -89,7 +89,7 @@ def main() -> None:
         b"UART bridge ready\r\nRX 54 45 53 54\r\ntelemetry packet: ok\r\n"
     )
     window.show()
-    window.console_tab.serial_bar.set_handshake_ok("release-v2.1")
+    window.console_tab.serial_bar.set_handshake_ok("release-v3.0")
     window._apply_handshake_gate(connected=True)
 
     captures = [
