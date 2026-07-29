@@ -509,19 +509,49 @@ class MotorCard(QFrame):
         super().__init__(parent)
         self.setObjectName("card")
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(18, 18, 18, 14)
-        outer.setSpacing(10)
+        outer.setContentsMargins(
+            theme.LAYOUT_MARGIN_CARD,
+            theme.LAYOUT_MARGIN_CARD_Y,
+            theme.LAYOUT_MARGIN_CARD,
+            theme.LAYOUT_MARGIN_CARD_Y,
+        )
+        outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
+
+        self.upper_region = QWidget(self)
+        self.upper_region.setFixedHeight(theme.CARD_UPPER_REGION_HEIGHT)
+        upper_layout = QVBoxLayout(self.upper_region)
+        upper_layout.setContentsMargins(
+            0,
+            theme.CARD_UPPER_MIN_GAP,
+            0,
+            theme.CARD_UPPER_MIN_GAP,
+        )
+        upper_layout.setSpacing(0)
+        upper_layout.addStretch(1)
+
+        self.upper_content = QWidget(self.upper_region)
+        self.upper_content.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        content_layout = QVBoxLayout(self.upper_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
         self.mode_badge = _ModeBadge(self)
-        outer.addWidget(self.mode_badge)
+        content_layout.addWidget(self.mode_badge)
 
         self.current_badge = _CurrentBadge(self)
-        outer.addWidget(self.current_badge)
+        content_layout.addWidget(self.current_badge)
 
-        divider = QFrame(self)
-        divider.setObjectName("divider")
-        divider.setFixedHeight(theme.DIVIDER_HEIGHT)
-        outer.addWidget(divider)
+        upper_layout.addWidget(self.upper_content)
+        upper_layout.addStretch(1)
+        outer.addWidget(self.upper_region)
+
+        self.divider = QFrame(self)
+        self.divider.setObjectName("divider")
+        self.divider.setFixedHeight(theme.DIVIDER_HEIGHT)
+        outer.addWidget(self.divider)
 
         row = QHBoxLayout()
         row.setSpacing(theme.LAYOUT_GAP_CONTROL)

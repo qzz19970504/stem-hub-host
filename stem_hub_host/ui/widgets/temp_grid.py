@@ -49,7 +49,9 @@ class ThermalGauge(QWidget):
         self._celsius: Optional[float] = None
         self._level = 0.0
         self._color = theme.FG_TERTIARY
-        self._animation: QPropertyAnimation | None = None
+        self._animation = QPropertyAnimation(self, b"level", self)
+        self._animation.setDuration(theme.ANIMATION_NORMAL_MS)
+        self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
     @property
     def celsius(self) -> Optional[float]:
@@ -83,19 +85,22 @@ class ThermalGauge(QWidget):
             ) / (self.MAX_CELSIUS - self.MIN_CELSIUS)
             target = max(0.0, min(1.0, target))
 
-        if self._animation is not None:
-            self._animation.stop()
         if not animate:
+            self._animation.stop()
             self._set_level(target)
             return
-
-        animation = QPropertyAnimation(self, b"level", self)
-        animation.setDuration(theme.ANIMATION_NORMAL_MS)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.setStartValue(self._level)
-        animation.setEndValue(target)
-        animation.start()
-        self._animation = animation
+        if (
+            self._animation.state() == QPropertyAnimation.State.Running
+            and float(self._animation.endValue()) == target
+        ):
+            return
+        if self._level == target:
+            self._animation.stop()
+            return
+        self._animation.stop()
+        self._animation.setStartValue(self._level)
+        self._animation.setEndValue(target)
+        self._animation.start()
 
     def refresh_theme(self) -> None:
         self._color = (

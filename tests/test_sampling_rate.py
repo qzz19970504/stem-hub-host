@@ -113,3 +113,20 @@ def test_plot_uses_real_elapsed_seconds_and_fixed_window() -> None:
     x_range = plot._plot.viewRange()[0]
     assert x_range[0] == pytest.approx(-DataBuffer.WINDOW_SECONDS)
     assert x_range[1] == pytest.approx(0.0)
+
+
+def test_data_buffer_keeps_only_latest_three_minutes(monkeypatch) -> None:
+    now = 1000.0
+    monkeypatch.setattr(
+        "stem_hub_host.data_buffer.time.monotonic",
+        lambda: now,
+    )
+    buffer = DataBuffer()
+    buffer.series["batt_v"].append(0.0, 36.0)
+    buffer.series["batt_v"].append(179.0, 36.5)
+    buffer.series["batt_v"].append(181.0, 37.0)
+
+    buffer.trim_to(181.0)
+
+    assert buffer.WINDOW_SECONDS == 180.0
+    assert list(buffer.series["batt_v"].times) == [179.0, 181.0]

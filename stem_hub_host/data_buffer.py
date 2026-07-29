@@ -43,7 +43,8 @@ class DataBuffer:
     t0 是 buffer 创建时刻, 之后所有时间都是 t - t0 的相对秒数.
     """
 
-    WINDOW_SECONDS = 300.0  # 5 分钟
+    WINDOW_SECONDS = 180.0
+    MAX_SAMPLES_PER_CHANNEL = 2000
 
     # 通道定义: name -> (color, unit)
     CHANNELS = {
@@ -62,8 +63,8 @@ class DataBuffer:
                 name=name,
                 color=color,
                 unit=unit,
-                times=deque(maxlen=2000),
-                values=deque(maxlen=2000),
+                times=deque(maxlen=self.MAX_SAMPLES_PER_CHANNEL),
+                values=deque(maxlen=self.MAX_SAMPLES_PER_CHANNEL),
             )
             for name, (color, unit) in self.CHANNELS.items()
         }
@@ -92,10 +93,12 @@ class DataBuffer:
             raw = getattr(sense, name)
             self.series[name].append(t, parser(raw))
 
-        # 滚动 trim
-        cutoff = t - self.WINDOW_SECONDS
-        for s in self.series.values():
-            s.trim(cutoff)
+        self.trim_to(t)
+
+    def trim_to(self, elapsed_seconds: float) -> None:
+        cutoff = elapsed_seconds - self.WINDOW_SECONDS
+        for series in self.series.values():
+            series.trim(cutoff)
 
     def reset(self) -> None:
         for s in self.series.values():

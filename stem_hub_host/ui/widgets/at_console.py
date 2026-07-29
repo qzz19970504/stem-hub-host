@@ -1,16 +1,19 @@
 """AT 指令控制台 — 第四轮 (log 无边框, send 区一个框 + SEND 按钮)."""
 from __future__ import annotations
 
+import time
+from collections import deque
 from html import escape
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -27,11 +30,14 @@ class AtConsole(QFrame):
     """
 
     send_requested = Signal(str)
+    LOG_RETENTION_SECONDS = 180.0
+    MAX_LOG_ENTRIES = 2000
+    MAX_DOCUMENT_BLOCKS = 2200
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("card")
-        self._entries: list[tuple[str, str]] = []
+        self._entries: deque[tuple[float, str, str]] = deque()
         # cyan 外发光
         self._glow = QGraphicsDropShadowEffect(self)
         self._glow.setBlurRadius(12)
@@ -46,7 +52,13 @@ class AtConsole(QFrame):
         # log 区 — 无边框, 仅背景同卡片色
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
-        self.log_view.setMaximumBlockCount(2000)
+        self.log_view.setMaximumBlockCount(self.MAX_DOCUMENT_BLOCKS)
+        self.log_view.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.log_view.customContextMenuRequested.connect(
+            self._show_log_context_menu
+        )
         self.log_view.setFrameShape(QFrame.Shape.NoFrame)
         f_log = QFont(theme.FONT_MONO)
         f_log.setPointSize(13)
@@ -105,10 +117,47 @@ class AtConsole(QFrame):
         self.input_edit.clear()
 
     def append_log(self, direction: str, text: str) -> None:
-        self._entries.append((direction, text))
-        if len(self._entries) > 2000:
-            del self._entries[: len(self._entries) - 2000]
+        now = time.monotonic()
+        self._entries.append((now, direction, text))
+        cutoff = now - self.LOG_RETENTION_SECONDS
+        trimmed_count = 0
+        while self._entries and self._entries[0][0] < cutoff:
+            self._entries.popleft()
+            trimmed_count += 1
+        while len(self._entries) > self.MAX_LOG_ENTRIES:
+            self._entries.popleft()
+            trimmed_count += 1
+        self._remove_leading_rendered_entries(trimmed_count)
         self._append_rendered_entry(direction, text)
+
+    def _remove_leading_rendered_entries(self, count: int) -> None:
+        for _ in range(count):
+            cursor = QTextCursor(self.log_view.document())
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()
+
+    def _render_entries(self) -> None:
+        self.log_view.clear()
+        for _timestamp, direction, text in self._entries:
+            self._append_rendered_entry(direction, text)
+
+    def _create_log_context_menu(self) -> QMenu:
+        menu = self.log_view.createStandardContextMenu()
+        menu.addSeparator()
+        clear_action = menu.addAction("清除全部")
+        clear_action.triggered.connect(self.clear_log)
+        return menu
+
+    def _show_log_context_menu(self, position: QPoint) -> None:
+        menu = self._create_log_context_menu()
+        menu.exec(self.log_view.viewport().mapToGlobal(position))
+        menu.deleteLater()
+
+    def clear_log(self) -> None:
+        self._entries.clear()
+        self.log_view.clear()
 
     def _append_rendered_entry(self, direction: str, text: str) -> None:
         prefix_map = {
@@ -156,10 +205,7 @@ class AtConsole(QFrame):
             "}"
         )
         if self._entries:
-            entries = list(self._entries)
-            self.log_view.clear()
-            for direction, text in entries:
-                self._append_rendered_entry(direction, text)
+            self._render_entries()
 
     def append_info(self, text: str) -> None:
         self.append_log("INFO", text)
