@@ -146,20 +146,21 @@ Before rendering a newly appended entry:
 now = time.monotonic()
 self._entries.append((now, direction, text))
 cutoff = now - self.LOG_RETENTION_SECONDS
-trimmed = False
-while self._entries and (
-    self._entries[0][0] < cutoff
-    or len(self._entries) > self.MAX_LOG_ENTRIES
-):
+trimmed_count = 0
+while self._entries and self._entries[0][0] < cutoff:
     self._entries.popleft()
-    trimmed = True
-if trimmed:
-    self._render_entries()
-else:
-    self._append_rendered_entry(direction, text)
+    trimmed_count += 1
+while len(self._entries) > self.MAX_LOG_ENTRIES:
+    self._entries.popleft()
+    trimmed_count += 1
+self._remove_leading_rendered_entries(trimmed_count)
+self._append_rendered_entry(direction, text)
 ```
 
-Update theme refresh and clear paths to unpack timestamped entries.
+Implement `_remove_leading_rendered_entries` with `QTextCursor` so each
+expired entry removes one leading document block without rebuilding the
+complete log. Update theme refresh and clear paths to unpack timestamped
+entries.
 
 - [ ] **Step 4: Run console tests**
 

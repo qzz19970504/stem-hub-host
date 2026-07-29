@@ -6,7 +6,7 @@ from collections import deque
 from html import escape
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
@@ -120,16 +120,23 @@ class AtConsole(QFrame):
         now = time.monotonic()
         self._entries.append((now, direction, text))
         cutoff = now - self.LOG_RETENTION_SECONDS
-        time_trimmed = False
+        trimmed_count = 0
         while self._entries and self._entries[0][0] < cutoff:
             self._entries.popleft()
-            time_trimmed = True
+            trimmed_count += 1
         while len(self._entries) > self.MAX_LOG_ENTRIES:
             self._entries.popleft()
-        if time_trimmed:
-            self._render_entries()
-        else:
-            self._append_rendered_entry(direction, text)
+            trimmed_count += 1
+        self._remove_leading_rendered_entries(trimmed_count)
+        self._append_rendered_entry(direction, text)
+
+    def _remove_leading_rendered_entries(self, count: int) -> None:
+        for _ in range(count):
+            cursor = QTextCursor(self.log_view.document())
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()
 
     def _render_entries(self) -> None:
         self.log_view.clear()

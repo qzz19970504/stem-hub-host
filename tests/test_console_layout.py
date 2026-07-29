@@ -91,6 +91,30 @@ def test_at_console_evicts_entries_older_than_three_minutes(
     qapp.processEvents()
 
 
+def test_at_console_time_eviction_does_not_rebuild_document(
+    qapp: QApplication,
+    monkeypatch,
+) -> None:
+    now = 1000.0
+    monkeypatch.setattr(time, "monotonic", lambda: now)
+    console = AtConsole()
+    console.append_log("RX", "old")
+    rebuilds = 0
+
+    def count_rebuild() -> None:
+        nonlocal rebuilds
+        rebuilds += 1
+
+    monkeypatch.setattr(console, "_render_entries", count_rebuild)
+    now += 181.0
+    console.append_log("RX", "new")
+
+    assert rebuilds == 0
+    assert console.log_view.toPlainText() == "<< new"
+    console.deleteLater()
+    qapp.processEvents()
+
+
 def test_at_console_caps_entries_and_qt_document_blocks(
     qapp: QApplication,
 ) -> None:
@@ -103,6 +127,10 @@ def test_at_console_caps_entries_and_qt_document_blocks(
     assert (
         console.log_view.document().blockCount()
         <= console.MAX_DOCUMENT_BLOCKS
+    )
+    assert "line-0" not in console.log_view.toPlainText()
+    assert f"line-{console.MAX_LOG_ENTRIES + 19}" in (
+        console.log_view.toPlainText()
     )
     console.deleteLater()
     qapp.processEvents()
