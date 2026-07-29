@@ -103,6 +103,33 @@ def test_v2_firmware_does_not_pass_v3_power_protocol_gate() -> None:
     assert "INCOMPATIBLE_VERSION" in failures[-1]
 
 
+def test_v2_response_cannot_reenable_main_window_gate(monkeypatch) -> None:
+    app = get_app()
+    transport, worker, controller = _short_controller()
+    window = MainWindow(controller)
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda *args: QMessageBox.StandardButton.Ok,
+    )
+
+    assert worker.open("FAKE0", 115200)
+    QTimer.singleShot(
+        5,
+        lambda: transport.feed(b"+VERSION:release-v2.2\r\nOK\r\n"),
+    )
+    QTest.qWait(60)
+
+    assert not controller.is_handshake_ok
+    assert not worker.is_open()
+    assert window.console_tab.serial_bar.status_badge.text() == "OFFLINE"
+    assert window.console_tab.serial_bar.connect_btn.text() == "CONNECT"
+    assert not window.console_tab.charge_card.all_off_button.isEnabled()
+
+    window.close()
+    app.processEvents()
+
+
 def test_user_close_during_connecting_does_not_report_failure() -> None:
     _, worker, controller = _short_controller()
     failures: list[str] = []

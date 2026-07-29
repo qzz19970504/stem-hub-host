@@ -428,6 +428,8 @@ class MainWindow(QMainWindow):
 
     def _on_response(self, cmd: str, resp) -> None:
         if cmd.strip().startswith("AT+VERSION?") and resp.version is not None:
+            if not self._controller.is_handshake_ok:
+                return
             self.serial_bar.set_handshake_ok(resp.version.version)
             self.console_tab.at_console.append_info(f"Handshake OK: fw {resp.version.version}")
             self._apply_handshake_gate(connected=True)
