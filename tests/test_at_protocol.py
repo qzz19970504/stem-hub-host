@@ -17,10 +17,11 @@ from stem_hub_host.at_protocol import (
     cmd_query_sense,
     cmd_raw,
     iter_uart_tx_commands,
-    cmd_set_lm51770,
+    cmd_power_off,
+    cmd_set_charge,
+    cmd_set_drive,
     cmd_set_led,
     cmd_set_motor,
-    cmd_set_mp4317,
     cmd_set_nmos,
     cmd_set_uart2,
     cmd_set_uart23,
@@ -70,11 +71,12 @@ class TestCommandBuilders:
         assert cmd_set_nmos(1, True) == "AT+NMOS1=ON\r\n"
         assert cmd_set_nmos(2, False) == "AT+NMOS2=OFF\r\n"
 
-    def test_set_mp4317_lm51770(self):
-        assert cmd_set_mp4317(True) == "AT+MP4317=ON\r\n"
-        assert cmd_set_mp4317(False) == "AT+MP4317=OFF\r\n"
-        assert cmd_set_lm51770(True) == "AT+LM51770=ON\r\n"
-        assert cmd_set_lm51770(False) == "AT+LM51770=OFF\r\n"
+    def test_set_power_modes(self):
+        assert cmd_set_charge(True) == "AT+CHARGE=ON\r\n"
+        assert cmd_set_charge(False) == "AT+CHARGE=OFF\r\n"
+        assert cmd_set_drive(True) == "AT+DRIVE=ON\r\n"
+        assert cmd_set_drive(False) == "AT+DRIVE=OFF\r\n"
+        assert cmd_power_off() == "AT+POWER=OFF\r\n"
 
     def test_set_uart(self):
         assert cmd_set_uart2(True) == "AT+UART2=ON\r\n"

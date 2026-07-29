@@ -22,14 +22,6 @@ from PySide6.QtCore import QObject, QTimer
 from .at_protocol import (
     CRLF,
     LineSplitter,
-    cmd_set_motor,
-    cmd_set_led,
-    cmd_set_mp4317,
-    cmd_set_lm51770,
-    cmd_set_nmos,
-    cmd_set_uart2,
-    cmd_set_uart3,
-    cmd_set_uart23,
 )
 from .serial_worker import SerialWorker
 from .transport import FakeSerialTransport
@@ -38,7 +30,7 @@ from .transport import FakeSerialTransport
 class FakeFirmware(QObject):
     """模拟固件行为."""
 
-    VERSION = "release-v2.2-fake"
+    VERSION = "release-v3.0-fake"
 
     def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -74,6 +66,14 @@ class FakeFirmware(QObject):
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll)
         self._poll_timer.start(5)  # 5 ms 一次
+
+    def _set_power_mode(self, mode: str) -> None:
+        self._lm51770 = False
+        self._mp4317 = False
+        if mode == "charge":
+            self._lm51770 = True
+        elif mode == "drive":
+            self._mp4317 = True
 
     def _poll(self) -> None:
         """定时检查 worker transport 写出的字节."""
@@ -165,17 +165,17 @@ class FakeFirmware(QObject):
                 transport.feed(b"OK" + CRLF.encode())
             except Exception:
                 transport.feed(b"ERROR" + CRLF.encode())
-        elif cmd == "AT+MP4317=ON":
-            self._mp4317 = True
+        elif cmd == "AT+CHARGE=ON":
+            self._set_power_mode("charge")
             transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+MP4317=OFF":
-            self._mp4317 = False
+        elif cmd == "AT+CHARGE=OFF":
+            self._set_power_mode("off")
             transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+LM51770=ON":
-            self._lm51770 = True
+        elif cmd == "AT+DRIVE=ON":
+            self._set_power_mode("drive")
             transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+LM51770=OFF":
-            self._lm51770 = False
+        elif cmd in ("AT+DRIVE=OFF", "AT+POWER=OFF"):
+            self._set_power_mode("off")
             transport.feed(b"OK" + CRLF.encode())
         elif cmd == "AT+UART2=ON":
             self._uart2 = True

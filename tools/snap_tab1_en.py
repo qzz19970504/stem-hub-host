@@ -49,9 +49,9 @@ def main():
         controller._latest_motor = MotorState(mode="FWD", current_ma=14200, overcurrent=0, fault=0)
         controller._latest_fault = FaultState(drv=0, aux=0)
         win._refresh_ui_from_state()
-        win.console_tab.serial_bar.set_handshake_ok("release-v2.1")
+        win.console_tab.serial_bar.set_handshake_ok("release-v3.0")
         win._apply_handshake_gate(connected=True)
-        win.console_tab.charge_card.set_toggle("DISCHARGE", True)
+        win.console_tab.charge_card.set_toggle("DRIVE", True)
         win.console_tab.charge_card.set_toggle("LIGHTS", True)
         win.console_tab.battery_card.ring.set_value(37.0, animate=False)
 
@@ -64,7 +64,7 @@ def main():
         at.append_log("RX", "14.2A")
         at.append_log("TX", "AT+GET=TEMP_BAT")
         at.append_log("RX", "42.5C")
-        at.append_info("handshake ok: firmware release-v2.1")
+        at.append_info("handshake ok: firmware release-v3.0")
 
         QApplication.processEvents()
         # 等待事件循环跑几帧确保 paint 完成

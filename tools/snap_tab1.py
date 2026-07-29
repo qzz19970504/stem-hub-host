@@ -52,11 +52,11 @@ def main() -> None:
         controller._latest_motor = MotorState(mode="FWD", current_ma=14200, overcurrent=0, fault=0)
         controller._latest_fault = FaultState(drv=0, aux=0)
         win._refresh_ui_from_state()
-        win.console_tab.serial_bar.set_handshake_ok("release-v2.1")
+        win.console_tab.serial_bar.set_handshake_ok("release-v3.0")
         # 模拟握手门禁开启
         win._apply_handshake_gate(connected=True)
         # 模拟 toggle
-        win.console_tab.charge_card.set_toggle("DISCHARGE", True)
+        win.console_tab.charge_card.set_toggle("DRIVE", True)
         win.console_tab.charge_card.set_toggle("LIGHTS", True)
         # 故障灯
         c = win.console_tab.charge_card
@@ -76,7 +76,7 @@ def main() -> None:
         at.append_log("RX", "14.2A")
         at.append_log("TX", "AT+GET=TEMP_BAT")
         at.append_log("RX", "42.5C")
-        at.append_info(f"Handshake OK: fw release-v2.1")
+        at.append_info("Handshake OK: fw release-v3.0")
         # 多次 processEvents 让动画跑到目标值
         for _ in range(12):
             QApplication.processEvents()

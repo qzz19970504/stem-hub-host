@@ -72,6 +72,33 @@ def test_set_motor(fake_pair):
     assert resp2.motor.mode == "FWD"
 
 
+def test_power_modes_are_mutually_exclusive_in_fake_firmware(fake_pair):
+    from stem_hub_host.at_protocol import (
+        cmd_power_off,
+        cmd_set_charge,
+        cmd_set_drive,
+    )
+
+    worker, firmware = fake_pair
+
+    assert worker.send_and_wait(cmd_set_charge(True), timeout_ms=500).ok
+    assert firmware._lm51770 is True
+    assert firmware._mp4317 is False
+
+    assert worker.send_and_wait(cmd_set_drive(True), timeout_ms=500).ok
+    assert firmware._lm51770 is False
+    assert firmware._mp4317 is True
+
+    assert worker.send_and_wait(cmd_power_off(), timeout_ms=500).ok
+    assert firmware._lm51770 is False
+    assert firmware._mp4317 is False
+
+    old_command = worker.send_and_wait("AT+LM51770=ON\r\n", timeout_ms=500)
+    assert not old_command.ok
+    assert old_command.error is not None
+    assert old_command.error.code == "PARSE"
+
+
 def test_error_response(fake_pair):
     """错误的命令 → ERROR:PARSE."""
     worker, fw = fake_pair

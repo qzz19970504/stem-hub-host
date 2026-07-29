@@ -110,7 +110,7 @@ def _seed_connected(window: MainWindow) -> None:
 
     charge_card = window.console_tab.charge_card
     charge_card.clear_controls()
-    charge_card.set_toggle("DISCHARGE", True, animate=False)
+    charge_card.set_toggle("DRIVE", True, animate=False)
     charge_card.set_toggle("LIGHTS", True, animate=False)
 
     _clear_console(window)
@@ -119,9 +119,9 @@ def _seed_connected(window: MainWindow) -> None:
     console.append_log("RX", "OK")
     console.append_log("TX", "AT+GET=VOLTAGE")
     console.append_log("RX", "37.0V")
-    console.append_info("Handshake OK: firmware release-v2.1")
+    console.append_info("Handshake OK: firmware release-v3.0")
 
-    window.console_tab.serial_bar.set_handshake_ok("release-v2.1")
+    window.console_tab.serial_bar.set_handshake_ok("release-v3.0")
     window._apply_handshake_gate(connected=True)
 
 

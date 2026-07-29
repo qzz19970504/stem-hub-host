@@ -72,7 +72,7 @@ class ChargeModeCard(QFrame):
         outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
         self._cells: dict[str, _ToggleCell] = {}
-        top_row = self._make_toggle_row(["CHARGE", "DISCHARGE"])
+        top_row = self._make_toggle_row(["CHARGE", "DRIVE"])
         outer.addLayout(top_row)
 
         outer.addLayout(self._make_toggle_row(
