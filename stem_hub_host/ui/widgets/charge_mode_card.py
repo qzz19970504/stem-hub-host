@@ -71,11 +71,32 @@ class ChargeModeCard(QFrame):
         )
         outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
+        self.upper_region = QWidget(self)
+        self.upper_region.setFixedHeight(theme.CARD_UPPER_REGION_HEIGHT)
+        upper_layout = QVBoxLayout(self.upper_region)
+        upper_layout.setContentsMargins(
+            0,
+            theme.CARD_UPPER_MIN_GAP,
+            0,
+            theme.CARD_UPPER_MIN_GAP,
+        )
+        upper_layout.setSpacing(0)
+        upper_layout.addStretch(1)
+
+        self.upper_content = QWidget(self.upper_region)
+        self.upper_content.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        content_layout = QVBoxLayout(self.upper_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(theme.LAYOUT_GAP_CONTROL)
+
         self._cells: dict[str, _ToggleCell] = {}
         top_row = self._make_toggle_row(["CHARGE", "DRIVE"])
-        outer.addLayout(top_row)
+        content_layout.addLayout(top_row)
 
-        outer.addLayout(self._make_toggle_row(
+        content_layout.addLayout(self._make_toggle_row(
             ["NMOS1", "NMOS2", "LIGHTS"]
         ))
 
@@ -95,13 +116,15 @@ class ChargeModeCard(QFrame):
         self.all_off_button.clicked.connect(self.all_off_clicked)
         all_off_layout.addWidget(self.all_off_button)
         all_off_layout.addStretch(1)
-        outer.addWidget(self.all_off_row)
+        content_layout.addWidget(self.all_off_row)
+
+        upper_layout.addWidget(self.upper_content)
+        upper_layout.addStretch(1)
+        outer.addWidget(self.upper_region)
 
         # 下划线 (分隔 toggle 区与故障区)
-        outer.addSpacing(6)
-        outer.addStretch(1)
-        outer.addWidget(_make_divider())
-        outer.addSpacing(6)
+        self.divider = _make_divider()
+        outer.addWidget(self.divider)
 
         fault_grid = QGridLayout()
         fault_grid.setHorizontalSpacing(8)

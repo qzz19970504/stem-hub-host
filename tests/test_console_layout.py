@@ -7,12 +7,21 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QPoint
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication, QSizePolicy
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QSizePolicy,
+    QWidget,
+)
 
 from stem_hub_host.data_buffer import DataBuffer
+from stem_hub_host.ui import theme
 from stem_hub_host.ui.tab1_console import ConsoleTab
 from stem_hub_host.ui.widgets.at_console import AtConsole
+from stem_hub_host.ui.widgets.charge_mode_card import ChargeModeCard
+from stem_hub_host.ui.widgets.motor_card import MotorCard
 
 
 @pytest.fixture(scope="module")
@@ -124,4 +133,47 @@ def test_clear_all_only_clears_log_entries(qapp: QApplication) -> None:
     assert console.input_edit.text() == "AT+SENSE?"
     assert sent.count() == 0
     console.deleteLater()
+    qapp.processEvents()
+
+
+def test_motor_and_output_dividers_share_vertical_position(
+    qapp: QApplication,
+) -> None:
+    host = QWidget()
+    layout = QHBoxLayout(host)
+    motor = MotorCard()
+    output = ChargeModeCard()
+    layout.addWidget(motor)
+    layout.addWidget(output)
+    host.resize(1320, 500)
+    host.show()
+    qapp.processEvents()
+
+    motor_y = motor.divider.mapTo(host, QPoint(0, 0)).y()
+    output_y = output.divider.mapTo(host, QPoint(0, 0)).y()
+
+    assert abs(motor_y - output_y) <= 1
+    host.deleteLater()
+    qapp.processEvents()
+
+
+@pytest.mark.parametrize("card_type", [MotorCard, ChargeModeCard])
+def test_card_upper_content_is_vertically_centered(
+    qapp: QApplication,
+    card_type,
+) -> None:
+    card = card_type()
+    card.resize(650, 468)
+    card.show()
+    qapp.processEvents()
+    region_rect = card.upper_region.rect()
+    content_rect = card.upper_content.geometry()
+
+    assert abs(content_rect.center().y() - region_rect.center().y()) <= 2
+    assert content_rect.top() >= theme.CARD_UPPER_MIN_GAP
+    assert (
+        region_rect.bottom() - content_rect.bottom()
+        >= theme.CARD_UPPER_MIN_GAP
+    )
+    card.deleteLater()
     qapp.processEvents()
