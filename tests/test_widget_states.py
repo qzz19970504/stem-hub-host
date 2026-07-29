@@ -8,7 +8,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QPropertyAnimation, QSize, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QPushButton
@@ -20,7 +20,7 @@ from stem_hub_host.ui.tab2_plot import PlotTab
 from stem_hub_host.ui.widgets.at_console import AtConsole
 from stem_hub_host.ui.widgets.motor_card import MotorCard
 from stem_hub_host.ui.widgets.passthrough_panel import PassthroughPanel
-from stem_hub_host.ui.widgets.temp_grid import TempGridCard
+from stem_hub_host.ui.widgets.temp_grid import TempGridCard, ThermalGauge
 from stem_hub_host.ui.widgets.toggle_switch import ToggleSwitch
 
 
@@ -42,6 +42,22 @@ def test_motor_buttons_follow_confirmed_mode(qapp: QApplication) -> None:
     assert sum(button.isChecked() for button in card.buttons.values()) == 1
 
     card.deleteLater()
+    qapp.processEvents()
+
+
+def test_thermal_gauge_reuses_one_animation_for_repeated_updates(
+    qapp: QApplication,
+) -> None:
+    gauge = ThermalGauge()
+    gauge.set_value(25.0)
+    animation = gauge._animation
+
+    for _ in range(100):
+        gauge.set_value(25.0)
+
+    assert gauge._animation is animation
+    assert len(gauge.findChildren(QPropertyAnimation)) == 1
+    gauge.deleteLater()
     qapp.processEvents()
 
 

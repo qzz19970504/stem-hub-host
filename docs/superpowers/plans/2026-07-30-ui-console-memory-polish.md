@@ -266,6 +266,58 @@ git add stem_hub_host/ui/widgets/at_console.py tests/test_console_layout.py
 git commit -m "feat: clear AT log from context menu"
 ```
 
+### Task 3A: Reuse temperature gauge animations
+
+**Files:**
+- Modify: `stem_hub_host/ui/widgets/temp_grid.py`
+- Modify: `tests/test_widget_states.py`
+
+- [ ] **Step 1: Write the failing ownership test**
+
+Create one `ThermalGauge`, update it repeatedly with the same value, and
+assert that `_animation` keeps the same identity and that
+`findChildren(QPropertyAnimation)` returns exactly one object.
+
+- [ ] **Step 2: Verify the test fails**
+
+Run:
+
+```powershell
+& 'D:\Codes\STM32\stem-hub-host\env\release\Scripts\python.exe' -m pytest tests\test_widget_states.py::test_thermal_gauge_reuses_one_animation_for_repeated_updates -q
+```
+
+Expected: failure because every update creates another parent-owned animation.
+
+- [ ] **Step 3: Reuse a persistent animation**
+
+Construct and configure one `QPropertyAnimation` in `ThermalGauge.__init__`.
+In `set_value`, reuse it by stopping it and updating its start/end values;
+return early when the same target is already running or reached.
+
+```python
+self._animation = QPropertyAnimation(self, b"level", self)
+self._animation.setDuration(theme.ANIMATION_NORMAL_MS)
+self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+if (
+    self._animation.state() == QPropertyAnimation.State.Running
+    and float(self._animation.endValue()) == target
+):
+    return
+self._animation.stop()
+self._animation.setStartValue(self._level)
+self._animation.setEndValue(target)
+self._animation.start()
+```
+
+- [ ] **Step 4: Run related tests and commit**
+
+```powershell
+& 'D:\Codes\STM32\stem-hub-host\env\release\Scripts\python.exe' -m pytest tests\test_widget_states.py tests\test_behavior_regressions.py -q
+git add stem_hub_host/ui/widgets/temp_grid.py tests/test_widget_states.py
+git commit -m "fix: reuse temperature gauge animations"
+```
+
 ### Task 4: Align dividers and vertically center upper controls
 
 **Files:**
