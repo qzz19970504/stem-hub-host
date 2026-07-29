@@ -7,6 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from stem_hub_host.data_buffer import DataBuffer
@@ -94,5 +95,33 @@ def test_at_console_caps_entries_and_qt_document_blocks(
         console.log_view.document().blockCount()
         <= console.MAX_DOCUMENT_BLOCKS
     )
+    console.deleteLater()
+    qapp.processEvents()
+
+
+def test_at_console_context_menu_offers_clear_all(
+    qapp: QApplication,
+) -> None:
+    console = AtConsole()
+    menu = console._create_log_context_menu()
+
+    assert "清除全部" in [action.text() for action in menu.actions()]
+    menu.deleteLater()
+    console.deleteLater()
+    qapp.processEvents()
+
+
+def test_clear_all_only_clears_log_entries(qapp: QApplication) -> None:
+    console = AtConsole()
+    console.input_edit.setText("AT+SENSE?")
+    console.append_log("RX", "OK")
+    sent = QSignalSpy(console.send_requested)
+
+    console.clear_log()
+
+    assert console.log_view.toPlainText() == ""
+    assert len(console._entries) == 0
+    assert console.input_edit.text() == "AT+SENSE?"
+    assert sent.count() == 0
     console.deleteLater()
     qapp.processEvents()

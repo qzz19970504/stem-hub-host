@@ -5,7 +5,7 @@ import time
 from collections import deque
 from html import escape
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QFrame,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -52,6 +53,12 @@ class AtConsole(QFrame):
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(self.MAX_DOCUMENT_BLOCKS)
+        self.log_view.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.log_view.customContextMenuRequested.connect(
+            self._show_log_context_menu
+        )
         self.log_view.setFrameShape(QFrame.Shape.NoFrame)
         f_log = QFont(theme.FONT_MONO)
         f_log.setPointSize(13)
@@ -128,6 +135,22 @@ class AtConsole(QFrame):
         self.log_view.clear()
         for _timestamp, direction, text in self._entries:
             self._append_rendered_entry(direction, text)
+
+    def _create_log_context_menu(self) -> QMenu:
+        menu = self.log_view.createStandardContextMenu()
+        menu.addSeparator()
+        clear_action = menu.addAction("清除全部")
+        clear_action.triggered.connect(self.clear_log)
+        return menu
+
+    def _show_log_context_menu(self, position: QPoint) -> None:
+        menu = self._create_log_context_menu()
+        menu.exec(self.log_view.viewport().mapToGlobal(position))
+        menu.deleteLater()
+
+    def clear_log(self) -> None:
+        self._entries.clear()
+        self.log_view.clear()
 
     def _append_rendered_entry(self, direction: str, text: str) -> None:
         prefix_map = {
