@@ -1,6 +1,8 @@
 """AT 指令控制台 — 第四轮 (log 无边框, send 区一个框 + SEND 按钮)."""
 from __future__ import annotations
 
+import time
+from collections import deque
 from html import escape
 
 from PySide6.QtCore import Qt, Signal
@@ -27,11 +29,14 @@ class AtConsole(QFrame):
     """
 
     send_requested = Signal(str)
+    LOG_RETENTION_SECONDS = 180.0
+    MAX_LOG_ENTRIES = 2000
+    MAX_DOCUMENT_BLOCKS = 2200
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("card")
-        self._entries: list[tuple[str, str]] = []
+        self._entries: deque[tuple[float, str, str]] = deque()
         # cyan 外发光
         self._glow = QGraphicsDropShadowEffect(self)
         self._glow.setBlurRadius(12)
@@ -46,7 +51,7 @@ class AtConsole(QFrame):
         # log 区 — 无边框, 仅背景同卡片色
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
-        self.log_view.setMaximumBlockCount(2000)
+        self.log_view.setMaximumBlockCount(self.MAX_DOCUMENT_BLOCKS)
         self.log_view.setFrameShape(QFrame.Shape.NoFrame)
         f_log = QFont(theme.FONT_MONO)
         f_log.setPointSize(13)
@@ -105,10 +110,24 @@ class AtConsole(QFrame):
         self.input_edit.clear()
 
     def append_log(self, direction: str, text: str) -> None:
-        self._entries.append((direction, text))
-        if len(self._entries) > 2000:
-            del self._entries[: len(self._entries) - 2000]
-        self._append_rendered_entry(direction, text)
+        now = time.monotonic()
+        self._entries.append((now, direction, text))
+        cutoff = now - self.LOG_RETENTION_SECONDS
+        time_trimmed = False
+        while self._entries and self._entries[0][0] < cutoff:
+            self._entries.popleft()
+            time_trimmed = True
+        while len(self._entries) > self.MAX_LOG_ENTRIES:
+            self._entries.popleft()
+        if time_trimmed:
+            self._render_entries()
+        else:
+            self._append_rendered_entry(direction, text)
+
+    def _render_entries(self) -> None:
+        self.log_view.clear()
+        for _timestamp, direction, text in self._entries:
+            self._append_rendered_entry(direction, text)
 
     def _append_rendered_entry(self, direction: str, text: str) -> None:
         prefix_map = {
@@ -156,10 +175,7 @@ class AtConsole(QFrame):
             "}"
         )
         if self._entries:
-            entries = list(self._entries)
-            self.log_view.clear()
-            for direction, text in entries:
-                self._append_rendered_entry(direction, text)
+            self._render_entries()
 
     def append_info(self, text: str) -> None:
         self.append_log("INFO", text)

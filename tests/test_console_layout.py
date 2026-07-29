@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 import pytest
 
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from stem_hub_host.data_buffer import DataBuffer
 from stem_hub_host.ui.tab1_console import ConsoleTab
+from stem_hub_host.ui.widgets.at_console import AtConsole
 
 
 @pytest.fixture(scope="module")
@@ -59,3 +61,38 @@ def test_console_cards_do_not_bias_target_column_ratio(
         card.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Ignored
         for card in cards
     )
+
+
+def test_at_console_evicts_entries_older_than_three_minutes(
+    qapp: QApplication,
+    monkeypatch,
+) -> None:
+    now = 1000.0
+    monkeypatch.setattr(time, "monotonic", lambda: now)
+    console = AtConsole()
+    console.append_log("RX", "old")
+    now += 181.0
+    console.append_log("RX", "new")
+
+    assert "old" not in console.log_view.toPlainText()
+    assert "new" in console.log_view.toPlainText()
+    assert len(console._entries) == 1
+    console.deleteLater()
+    qapp.processEvents()
+
+
+def test_at_console_caps_entries_and_qt_document_blocks(
+    qapp: QApplication,
+) -> None:
+    console = AtConsole()
+    for index in range(console.MAX_LOG_ENTRIES + 20):
+        console.append_log("RX", f"line-{index}")
+
+    assert len(console._entries) == console.MAX_LOG_ENTRIES
+    assert console.log_view.maximumBlockCount() == console.MAX_DOCUMENT_BLOCKS
+    assert (
+        console.log_view.document().blockCount()
+        <= console.MAX_DOCUMENT_BLOCKS
+    )
+    console.deleteLater()
+    qapp.processEvents()
