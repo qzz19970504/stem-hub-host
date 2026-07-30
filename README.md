@@ -1,7 +1,7 @@
 # stem-hub 上位机
 
 STM32 `stem-hub` 固件的 Qt Python 上位机（PySide6）。当前对应
-`release-v3.0` 固件；完整协议见本仓的
+`release-v3.1` 固件；完整协议见本仓的
 [电源路径 AT 契约](docs/power-path-at-contract.md)和固件仓的
 [上位机AT命令文档](../stem-hub/上位机AT命令文档.md)。
 
@@ -88,7 +88,8 @@ stem-hub-host/
 - 串口 UART1 = 115200 8N1，AT 命令必须大写、**无空格**、`\r\n` 结尾
 - 握手：`AT+VERSION?` → 只接受 `+VERSION:release-v3.x` + `OK`；v2.x 固件会以不兼容版本拒绝连接，避免新 UI 向旧协议发送无效电源命令
 - 电源模式仅发送一条命令：`AT+CHARGE=ON/OFF`、`AT+DRIVE=ON/OFF` 或 `AT+POWER=OFF`
-- `CHARGE=ON` 与 `DRIVE=ON` 由 MCU 执行“先全关、后单路打开”，上位机不再编排独立芯片命令
+- `CHARGE=ON` 表示启动 MCU 内固定 10 秒开 / 50 秒关的间歇充电循环；UI 开关表示循环已启用，不表示 LM51770 此刻必为开启
+- `DRIVE=ON` 与每次充电重新开启都由 MCU 执行“先全关、后单路打开”，上位机不编排芯片级时序
 - 周期查询：`AT+SENSE?` 返回 `+SENSE:...` + `OK`；五路传感 ADC 是最近五个完整成功采样周期的同步滑动均值
 - 控制命令单条发完等回包；旧的 `AT+LM51770` / `AT+MP4317` 指令会被固件拒绝
 
