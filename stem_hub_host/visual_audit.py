@@ -194,7 +194,7 @@ def capture_visual_matrix(output_dir: Path) -> list[VisualCapture]:
     captures: list[VisualCapture] = []
     try:
         for color_scheme in ("dark", "light"):
-            window.set_color_scheme(color_scheme, persist=False)
+            window.set_color_scheme(color_scheme, persist=False, animate=False)
             for view, size in (
                 ("fixed", FIXED_VIEW_SIZE),
                 ("fullscreen", FULLSCREEN_AUDIT_SIZE),
