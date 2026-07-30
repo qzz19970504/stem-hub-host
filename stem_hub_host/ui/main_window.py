@@ -1,18 +1,7 @@
 """Main window and controller-to-UI state binding."""
 from __future__ import annotations
 
-from PySide6.QtCore import (
-    QEasingCurve,
-    QEvent,
-    QPointF,
-    Property,
-    QPropertyAnimation,
-    QSettings,
-    QTimer,
-    Qt,
-    Signal,
-)
-from PySide6.QtGui import QPainter, QPainterPath, QPixmap, QPolygonF
+from PySide6.QtCore import QEvent, QEasingCurve, QPropertyAnimation, QSettings, QTimer, Qt
 from PySide6.QtWidgets import (
     QFrame,
     QMainWindow,
@@ -51,79 +40,6 @@ AUX_TOGGLE_MAP = {
 WINDOW_W = theme.WINDOW_WIDTH
 WINDOW_H = theme.WINDOW_HEIGHT
 QT_WIDGET_SIZE_LIMIT = (1 << 24) - 1
-
-
-class _ThemeTransitionOverlay(QWidget):
-    """Reveal the newly painted client area from top-left to bottom-right."""
-
-    progress_changed = Signal()
-
-    def __init__(self, old_surface: QPixmap, parent: QWidget) -> None:
-        super().__init__(parent)
-        self._old_surface = old_surface
-        self._progress = 0.0
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
-        self.setGeometry(parent.rect())
-
-    @Property(float, notify=progress_changed)
-    def progress(self) -> float:
-        return self._progress
-
-    @progress.setter
-    def progress(self, value: float) -> None:
-        self._progress = max(0.0, min(1.0, value))
-        self.progress_changed.emit()
-        self.update()
-
-    def _covered_polygon(self) -> QPolygonF:
-        width = float(self.width())
-        height = float(self.height())
-        threshold = (width + height) * self._progress
-        source = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
-        result: list[tuple[float, float]] = []
-        for index, current in enumerate(source):
-            following = source[(index + 1) % len(source)]
-            current_inside = current[0] + current[1] >= threshold
-            following_inside = following[0] + following[1] >= threshold
-            if current_inside:
-                result.append(current)
-            if current_inside != following_inside:
-                denominator = (
-                    following[0] - current[0] + following[1] - current[1]
-                )
-                ratio = (threshold - current[0] - current[1]) / denominator
-                result.append(
-                    (
-                        current[0] + (following[0] - current[0]) * ratio,
-                        current[1] + (following[1] - current[1]) * ratio,
-                    )
-                )
-        return QPolygonF([QPointF(x, y) for x, y in result])
-
-    def paintEvent(self, _event) -> None:  # type: ignore[override]
-        if self._old_surface.isNull() or self._progress >= 1.0:
-            return
-        painter = QPainter(self)
-        polygon = self._covered_polygon()
-        if polygon.isEmpty():
-            return
-        path = QPainterPath()
-        path.addPolygon(polygon)
-        painter.setClipPath(path)
-        painter.drawPixmap(0, 0, self._old_surface)
-
-    def start(self) -> None:
-        self.show()
-        self.raise_()
-        animation = QPropertyAnimation(self, b"progress", self)
-        animation.setDuration(280)
-        animation.setStartValue(0.0)
-        animation.setEndValue(1.0)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.finished.connect(self.deleteLater)
-        self._animation = animation
-        animation.start()
 
 
 class MainWindow(QMainWindow):
@@ -254,9 +170,13 @@ class MainWindow(QMainWindow):
     ) -> None:
         """Switch the complete application palette without losing UI state."""
 
-        if scheme not in {"dark", "light"} or scheme == self.color_scheme:
+        if scheme not in {"dark", "light"}:
             return
-        old_surface = self.grab() if animate else QPixmap()
+        # Native Windows chrome and the Qt client are painted by different
+        # compositors.  A client-only wipe makes that split more visible, so
+        # use one short whole-window dim/fade instead.
+        if animate:
+            self.setWindowOpacity(0.82)
         self.setUpdatesEnabled(False)
         try:
             theme.set_color_scheme(scheme)
@@ -275,9 +195,14 @@ class MainWindow(QMainWindow):
             self.setUpdatesEnabled(True)
             self.update()
 
-        if animate and not old_surface.isNull():
-            overlay = _ThemeTransitionOverlay(old_surface, self)
-            overlay.start()
+        if animate:
+            fade = QPropertyAnimation(self, b"windowOpacity", self)
+            fade.setDuration(180)
+            fade.setStartValue(0.82)
+            fade.setEndValue(1.0)
+            fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._theme_fade = fade
+            fade.start()
         if persist:
             self._appearance_settings.setValue("appearance/colorScheme", scheme)
 
