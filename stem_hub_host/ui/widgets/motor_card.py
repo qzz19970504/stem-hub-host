@@ -198,7 +198,10 @@ class _ModeBadge(QFrame):
 
     def _apply_surface(self, border: str, *, active: bool) -> None:
         if active:
-            start, end = theme.mode_surface(border)
+            # Keep the card surface neutral when a mode is active.  The mode
+            # color remains on the border and value glow, while the interior
+            # matches the surrounding blue card background.
+            start = end = theme.BG_CARD
         else:
             start, end = theme.BG_ELEVATED, theme.BG_CARD
         self.setStyleSheet(
