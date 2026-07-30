@@ -12,7 +12,7 @@
     {
       "id": "dark:fixed:console:connected",
       "file": "dark/fixed-console-connected.png",
-      "sha256": "3cd8f941137ca14ea4f3b146d37e7497cd03bdcdc8005b9f4ad9d7430ee9ad01",
+      "sha256": "b8a4ea878bcbc312415d5f701acb01af0315a171677d0aae860f8f3714043d77",
       "width": 1600,
       "height": 900,
       "theme": "dark",
@@ -24,7 +24,7 @@
     {
       "id": "dark:fixed:charts:connected",
       "file": "dark/fixed-charts-connected.png",
-      "sha256": "ee2e8136bcc7d357c344f3279319908be3c3ca6701d3df12500d64365d08029f",
+      "sha256": "ba48a7a19164cd7b141d7975468d9bf145714d57d1b85055349b6b19c2da8f84",
       "width": 1600,
       "height": 900,
       "theme": "dark",
@@ -60,7 +60,7 @@
     {
       "id": "dark:fullscreen:console:connected",
       "file": "dark/fullscreen-console-connected.png",
-      "sha256": "cbc1bce633cf235fe571efa02d0435b69d004dbb71007cc63248f920d2cea6ff",
+      "sha256": "1918f8ce5b9ef5bc4a8895f326b02aa6b63ebebe52c1c3e815985f093d2cbf42",
       "width": 1920,
       "height": 1080,
       "theme": "dark",
@@ -72,7 +72,7 @@
     {
       "id": "dark:fullscreen:charts:connected",
       "file": "dark/fullscreen-charts-connected.png",
-      "sha256": "2f1352f2da8bc2c0cbc9d9bd3c7db7b9ea52e51ced0b6db9d11b3e6b7e2b5510",
+      "sha256": "960a29a3efb6c49350b179fc23f90cde19d1ed635d79f50c83e90df541154e21",
       "width": 1920,
       "height": 1080,
       "theme": "dark",
@@ -108,7 +108,7 @@
     {
       "id": "light:fixed:console:connected",
       "file": "light/fixed-console-connected.png",
-      "sha256": "0bc78e3ea52d26c397f163e283c119b0b75010f8035ad5966008f46db2cda082",
+      "sha256": "4e610fc7c1a730289cf6fe9d0d14302ec7c58828d764a8c7bea0954d10bc0a71",
       "width": 1600,
       "height": 900,
       "theme": "light",
@@ -120,7 +120,7 @@
     {
       "id": "light:fixed:charts:connected",
       "file": "light/fixed-charts-connected.png",
-      "sha256": "cb195f711e6bebac1b6041d1fd77525275dac5181bde0f232076fb00f8d37750",
+      "sha256": "0714f7d03237dfffa7746d7307c95cef8fae8ec80a8687ea297d3f27dc48b500",
       "width": 1600,
       "height": 900,
       "theme": "light",
@@ -156,7 +156,7 @@
     {
       "id": "light:fullscreen:console:connected",
       "file": "light/fullscreen-console-connected.png",
-      "sha256": "66c29b7da04e167b92dd851c98fcec0799fe274cd2c3937f6d8da025d75b7cb9",
+      "sha256": "b7f9f1f7c016f1d522c79526b7c8d9d4b7d9ff85564b682720f3a019d737ce60",
       "width": 1920,
       "height": 1080,
       "theme": "light",
@@ -168,7 +168,7 @@
     {
       "id": "light:fullscreen:charts:connected",
       "file": "light/fullscreen-charts-connected.png",
-      "sha256": "c8f854668b15ba0aad886bdbac5a0621e53e1ec1f59c7476e6be1844e6836928",
+      "sha256": "7ce5f6530dfe77bdc47516635ab3f9b6ee9d1d32fda6dd40d453bb87f7fce18b",
       "width": 1920,
       "height": 1080,
       "theme": "light",
