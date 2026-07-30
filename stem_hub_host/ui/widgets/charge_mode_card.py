@@ -72,6 +72,9 @@ class ChargeModeCard(QFrame):
         outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
         self.upper_region = QWidget(self)
+        self.upper_region.setStyleSheet(
+            f"background-color: {theme.BG_CARD};"
+        )
         self.upper_region.setFixedHeight(theme.CARD_UPPER_REGION_HEIGHT)
         upper_layout = QVBoxLayout(self.upper_region)
         upper_layout.setContentsMargins(

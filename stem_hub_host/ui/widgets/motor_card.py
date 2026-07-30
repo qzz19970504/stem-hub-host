@@ -198,10 +198,7 @@ class _ModeBadge(QFrame):
 
     def _apply_surface(self, border: str, *, active: bool) -> None:
         if active:
-            # Keep the card surface neutral when a mode is active.  The mode
-            # color remains on the border and value glow, while the interior
-            # matches the surrounding blue card background.
-            start = end = theme.BG_CARD
+            start, end = theme.mode_surface(border)
         else:
             start, end = theme.BG_ELEVATED, theme.BG_CARD
         self.setStyleSheet(
@@ -521,6 +518,9 @@ class MotorCard(QFrame):
         outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
         self.upper_region = QWidget(self)
+        self.upper_region.setStyleSheet(
+            f"background-color: {theme.BG_CARD};"
+        )
         self.upper_region.setFixedHeight(theme.CARD_UPPER_REGION_HEIGHT)
         upper_layout = QVBoxLayout(self.upper_region)
         upper_layout.setContentsMargins(

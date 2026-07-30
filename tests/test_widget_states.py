@@ -18,6 +18,7 @@ from stem_hub_host.ui import theme
 from stem_hub_host.ui.stylesheet import get_qss, invalidate_cache
 from stem_hub_host.ui.tab2_plot import PlotTab
 from stem_hub_host.ui.widgets.at_console import AtConsole
+from stem_hub_host.ui.widgets.charge_mode_card import ChargeModeCard
 from stem_hub_host.ui.widgets.motor_card import MotorCard
 from stem_hub_host.ui.widgets.passthrough_panel import PassthroughPanel
 from stem_hub_host.ui.widgets.temp_grid import TempGridCard, ThermalGauge
@@ -468,24 +469,41 @@ def test_motor_mode_has_glow_and_buttons_use_translucent_surfaces(
     qapp.processEvents()
 
 
-def test_motor_mode_badge_uses_card_background_for_active_mode(
+def test_motor_mode_badge_fill_follows_active_mode(
     qapp: QApplication,
 ) -> None:
     card = MotorCard()
     card.setFixedSize(650, 410)
     card.show()
     qapp.processEvents()
-    samples = []
+    samples = {}
     for mode in ("FWD", "WAKE", "BRAKE"):
         card.update_state(mode, 0, 0, 0)
         qapp.processEvents()
         image = card.mode_badge.grab().toImage()
-        samples.append(image.pixelColor(18, 18))
+        samples[mode] = image.pixelColor(18, 18)
+
+    assert samples["FWD"].green() > samples["FWD"].red()
+    assert samples["WAKE"].red() > samples["WAKE"].blue()
+    assert samples["BRAKE"].red() > samples["BRAKE"].green()
+    assert len({color.name() for color in samples.values()}) == 3
+
+
+def test_motor_and_charge_upper_regions_use_card_background(
+    qapp: QApplication,
+) -> None:
+    motor = MotorCard()
+    charge = ChargeModeCard()
+    motor.show()
+    charge.show()
+    qapp.processEvents()
 
     expected = QColor(theme.BG_CARD)
-    assert all(color.name() == expected.name() for color in samples)
+    assert motor.upper_region.grab().toImage().pixelColor(4, 4).name() == expected.name()
+    assert charge.upper_region.grab().toImage().pixelColor(4, 4).name() == expected.name()
 
-    card.deleteLater()
+    motor.deleteLater()
+    charge.deleteLater()
     qapp.processEvents()
 
 
