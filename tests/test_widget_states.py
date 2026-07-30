@@ -507,6 +507,28 @@ def test_motor_and_charge_upper_regions_use_card_background(
     qapp.processEvents()
 
 
+def test_card_upper_regions_follow_light_theme_background(
+    qapp: QApplication,
+) -> None:
+    motor = MotorCard()
+    charge = ChargeModeCard()
+    motor.show()
+    charge.show()
+    theme.set_color_scheme("light")
+    motor.refresh_theme()
+    charge.refresh_theme()
+    qapp.processEvents()
+
+    expected = QColor(theme.BG_CARD)
+    assert motor.upper_region.grab().toImage().pixelColor(4, 4).name() == expected.name()
+    assert charge.upper_region.grab().toImage().pixelColor(4, 4).name() == expected.name()
+
+    theme.set_color_scheme("dark")
+    motor.deleteLater()
+    charge.deleteLater()
+    qapp.processEvents()
+
+
 def test_motor_buttons_keep_stable_firmware_order(
     qapp: QApplication,
 ) -> None:

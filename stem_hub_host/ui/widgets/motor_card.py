@@ -640,6 +640,9 @@ class MotorCard(QFrame):
             b.update()
 
     def refresh_theme(self) -> None:
+        self.upper_region.setStyleSheet(
+            f"background-color: {theme.BG_CARD};"
+        )
         self.mode_badge.refresh_theme()
         self.current_badge.refresh_theme()
         for button in self._btns.values():
