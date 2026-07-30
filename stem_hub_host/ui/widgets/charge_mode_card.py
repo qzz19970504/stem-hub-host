@@ -220,6 +220,9 @@ class ChargeModeCard(QFrame):
             cell.toggle.set_on(False, animate=False)
 
     def refresh_theme(self) -> None:
+        self.upper_region.setStyleSheet(
+            f"background-color: {theme.BG_CARD};"
+        )
         self.set_enabled(self.all_off_button.isEnabled())
         for cell in self._cells.values():
             cell.toggle.update()
