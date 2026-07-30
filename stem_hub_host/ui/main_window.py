@@ -1,7 +1,7 @@
 """Main window and controller-to-UI state binding."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QEasingCurve, QPropertyAnimation, QSettings, QTimer, Qt
+from PySide6.QtCore import QEvent, QSettings, QTimer, Qt
 from PySide6.QtWidgets import (
     QFrame,
     QMainWindow,
@@ -172,11 +172,6 @@ class MainWindow(QMainWindow):
 
         if scheme not in {"dark", "light"}:
             return
-        # Native Windows chrome and the Qt client are painted by different
-        # compositors.  A client-only wipe makes that split more visible, so
-        # use one short whole-window dim/fade instead.
-        if animate:
-            self.setWindowOpacity(0.82)
         self.setUpdatesEnabled(False)
         try:
             theme.set_color_scheme(scheme)
@@ -195,14 +190,6 @@ class MainWindow(QMainWindow):
             self.setUpdatesEnabled(True)
             self.update()
 
-        if animate:
-            fade = QPropertyAnimation(self, b"windowOpacity", self)
-            fade.setDuration(180)
-            fade.setStartValue(0.82)
-            fade.setEndValue(1.0)
-            fade.setEasingCurve(QEasingCurve.Type.OutCubic)
-            self._theme_fade = fade
-            fade.start()
         if persist:
             self._appearance_settings.setValue("appearance/colorScheme", scheme)
 
