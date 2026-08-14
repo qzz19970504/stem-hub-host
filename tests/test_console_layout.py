@@ -44,8 +44,10 @@ def test_console_grid_uses_target_column_ratio(console_tab: ConsoleTab) -> None:
 
 
 def test_console_grid_keeps_two_row_composition(console_tab: ConsoleTab) -> None:
-    assert console_tab.grid.rowStretch(0) == 565
-    assert console_tab.grid.rowStretch(1) == 435
+    assert theme.TOP_ROW_STRETCH == 520
+    assert theme.BOTTOM_ROW_STRETCH == 480
+    assert console_tab.grid.rowStretch(0) == 520
+    assert console_tab.grid.rowStretch(1) == 480
     assert console_tab.grid.indexOf(console_tab.at_console) >= 0
 
 
