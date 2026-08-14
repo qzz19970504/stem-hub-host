@@ -26,7 +26,8 @@ from .ui.main_window import MainWindow
 TOOL_VERSION = 1
 FIXED_VIEW_SIZE = (1600, 900)
 FULLSCREEN_AUDIT_SIZE = (1920, 1080)
-CONSOLE_TEMPERATURES = (12.0, 36.0, 58.0, 84.0)
+CONSOLE_TEMPERATURES = (12.0, 36.0, 58.0, 84.0, 47.0, 49.0)
+SETTLED_CONSOLE_TEMPERATURES = CONSOLE_TEMPERATURES[:4]
 
 
 @dataclass(frozen=True)
@@ -52,9 +53,11 @@ def _seed_plot(window: MainWindow) -> None:
         values = {
             "batt_v": 36.4 + math.sin(index / 17) * 0.45,
             "batt_ntc": 41.0 + math.sin(index / 23) * 1.8,
-            "ntc1_c": 38.0 + math.cos(index / 21) * 1.4,
-            "ntc2_c": 50.0 + math.sin(index / 14) * 2.3,
-            "ntc3_c": 45.0 + math.cos(index / 18) * 1.9,
+            "mcu_c": 38.0 + math.cos(index / 21) * 1.4,
+            "lm51770_c": 50.0 + math.sin(index / 14) * 2.3,
+            "mp4317_c": 45.0 + math.cos(index / 18) * 1.9,
+            "drv8874_c": 47.0 + math.sin(index / 16) * 1.7,
+            "charge_mos_c": 49.0 + math.cos(index / 19) * 2.1,
             "motor_i": 12.0 + math.sin(index / 8) * 2.0,
         }
         for name, value in values.items():
@@ -71,13 +74,22 @@ def _clear_console(window: MainWindow) -> None:
 
 def _seed_connected(window: MainWindow) -> None:
     controller = window._controller
-    batt_temp, ntc1_temp, ntc2_temp, ntc3_temp = CONSOLE_TEMPERATURES
+    (
+        battery_temperature,
+        mcu_temperature,
+        lm51770_temperature,
+        mp4317_temperature,
+        drv8874_temperature,
+        charge_mos_temperature,
+    ) = CONSOLE_TEMPERATURES
     sense = SenseData(
-        batt_ntc=f"{batt_temp:.1f}C",
+        batt_ntc=f"{battery_temperature:.1f}C",
         batt_v="37.0V",
-        ntc1_c=f"{ntc1_temp:.1f}C",
-        ntc2_c=f"{ntc2_temp:.1f}C",
-        ntc3_c=f"{ntc3_temp:.1f}C",
+        mcu_c=f"{mcu_temperature:.1f}C",
+        lm51770_c=f"{lm51770_temperature:.1f}C",
+        mp4317_c=f"{mp4317_temperature:.1f}C",
+        drv8874_c=f"{drv8874_temperature:.1f}C",
+        charge_mos_c=f"{charge_mos_temperature:.1f}C",
         motor_i="14.2A",
         tick=12345,
         count=6789,
@@ -104,7 +116,7 @@ def _seed_connected(window: MainWindow) -> None:
     battery_ring._set_glow_phase(0.5)
     for tile, value in zip(
         window.console_tab.temp_grid._tiles(),
-        CONSOLE_TEMPERATURES,
+        SETTLED_CONSOLE_TEMPERATURES,
     ):
         tile.set_value(value, animate=False)
 
@@ -119,9 +131,9 @@ def _seed_connected(window: MainWindow) -> None:
     console.append_log("RX", "OK")
     console.append_log("TX", "AT+GET=VOLTAGE")
     console.append_log("RX", "37.0V")
-    console.append_info("Handshake OK: firmware release-v3.0")
+    console.append_info("Handshake OK: firmware release-v3.2")
 
-    window.console_tab.serial_bar.set_handshake_ok("release-v3.0")
+    window.console_tab.serial_bar.set_handshake_ok("release-v3.2")
     window._apply_handshake_gate(connected=True)
 
 

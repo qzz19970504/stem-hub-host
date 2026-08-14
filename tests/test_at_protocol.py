@@ -38,6 +38,28 @@ from stem_hub_host.models import (
 )
 
 
+SEMANTIC_SENSE_FIELDS = (
+    ("BATT_NTC", "25.1C"),
+    ("BATT_V", "37.0V"),
+    ("MCU_C", "24.9C"),
+    ("LM51770_C", "35.2C"),
+    ("MP4317_C", "36.3C"),
+    ("DRV8874_C", "37.4C"),
+    ("CHARGE_MOS_C", "38.5C"),
+    ("MOTOR_I", "1.2A"),
+    ("TICK", "12345"),
+    ("COUNT", "42"),
+    ("STK_AT", "200"),
+    ("STK_SENSOR", "180"),
+    ("STK_MOTOR", "160"),
+    ("TX_SP", "3"),
+    ("TX_LS", "4"),
+)
+SEMANTIC_SENSE_LINE = "+SENSE:" + ",".join(
+    f"{key}={value}" for key, value in SEMANTIC_SENSE_FIELDS
+)
+
+
 # ---- 命令构造 ----
 class TestCommandBuilders:
     def test_handshake(self):
@@ -133,22 +155,69 @@ class TestParsedResponse:
         assert r.error.code == code
 
     def test_sense(self):
-        line = (
-            "+SENSE:BATT_NTC=25.1C,BATT_V=37.0V,NTC1_C=24.9C,NTC2_C=-5.2C,"
-            "NTC3_C=ERR,MOTOR_I=1.2A,TICK=12345,COUNT=42,"
-            "STK_AT=200,STK_SENSOR=180,STK_MOTOR=160,TX_SP=0,TX_LS=0"
-        )
-        r = ParsedResponse.parse(line)
+        r = ParsedResponse.parse(SEMANTIC_SENSE_LINE)
         assert r.sense is not None
         d = r.sense
         assert d.batt_ntc == "25.1C"
         assert d.batt_v == "37.0V"
-        assert d.ntc1_c == "24.9C"
-        assert d.ntc2_c == "-5.2C"
-        assert d.ntc3_c == "ERR"
+        assert d.mcu_c == "24.9C"
+        assert d.lm51770_c == "35.2C"
+        assert d.mp4317_c == "36.3C"
+        assert d.drv8874_c == "37.4C"
+        assert d.charge_mos_c == "38.5C"
         assert d.motor_i == "1.2A"
         assert d.tick == 12345
         assert d.count == 42
+        assert d.stk_at == 200
+        assert d.stk_sensor == 180
+        assert d.stk_motor == 160
+        assert d.tx_sp == 3
+        assert d.tx_ls == 4
+
+    def test_legacy_numbered_sense_line_is_rejected(self):
+        line = (
+            "+SENSE:BATT_NTC=25.1C,BATT_V=37.0V,NTC1_C=24.9C,NTC2_C=35.2C,"
+            "NTC3_C=36.3C,MOTOR_I=1.2A,TICK=12345,COUNT=42,"
+            "STK_AT=200,STK_SENSOR=180,STK_MOTOR=160,TX_SP=3,TX_LS=4"
+        )
+        assert ParsedResponse.parse(line).sense is None
+
+    @pytest.mark.parametrize(
+        "missing_key",
+        [key for key, _ in SEMANTIC_SENSE_FIELDS],
+    )
+    def test_missing_required_semantic_sense_field_is_rejected(self, missing_key):
+        line = "+SENSE:" + ",".join(
+            f"{key}={value}"
+            for key, value in SEMANTIC_SENSE_FIELDS
+            if key != missing_key
+        )
+        assert ParsedResponse.parse(line).sense is None
+
+    @pytest.mark.parametrize(
+        "extra_field",
+        [
+            "NTC1_C=24.9C",
+            "NTC2_C=35.2C",
+            "NTC3_C=36.3C",
+            "MCU_C=99.9C",
+        ],
+    )
+    def test_unexpected_or_duplicate_sense_field_is_rejected(self, extra_field):
+        assert ParsedResponse.parse(
+            f"{SEMANTIC_SENSE_LINE},{extra_field}"
+        ).sense is None
+
+    @pytest.mark.parametrize(
+        "numeric_key",
+        ["TICK", "COUNT", "STK_AT", "STK_SENSOR", "STK_MOTOR", "TX_SP", "TX_LS"],
+    )
+    def test_malformed_numeric_sense_diagnostic_is_rejected(self, numeric_key):
+        line = "+SENSE:" + ",".join(
+            f"{key}={'bad' if key == numeric_key else value}"
+            for key, value in SEMANTIC_SENSE_FIELDS
+        )
+        assert ParsedResponse.parse(line).sense is None
 
     def test_fault(self):
         r = ParsedResponse.parse("+FAULT:DRV=0,AUX=1")

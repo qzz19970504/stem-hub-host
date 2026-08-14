@@ -34,7 +34,7 @@ class AtError:
 # ---- 握手 ----
 @dataclass(frozen=True)
 class VersionInfo:
-    """`+VERSION:release-v3.0` 响应."""
+    """`+VERSION:release-v3.2` 响应."""
 
     version: str
 
@@ -50,18 +50,20 @@ class VersionInfo:
 # ---- 传感 ----
 @dataclass(frozen=True)
 class SenseData:
-    """`+SENSE:...` 响应, 13 个字段.
+    """`+SENSE:...` 响应, 15 个字段.
 
-    BATT_NTC / NTC*_C 是 'XX.XC' 或 'ERR' 字符串 — 这里先存 raw 字符串, UI 层负责格式化.
+    BATT_NTC / *_C 是 'XX.XC' 或 'ERR' 字符串 — 这里先存 raw 字符串, UI 层负责格式化.
     BATT_V 是 'XX.XV' 字符串, 同样 raw.
     MOTOR_I 是 'X.XA' 字符串.
     """
 
     batt_ntc: str  # 电池 NTC
     batt_v: str  # 电池电压
-    ntc1_c: str
-    ntc2_c: str
-    ntc3_c: str
+    mcu_c: str
+    lm51770_c: str
+    mp4317_c: str
+    drv8874_c: str
+    charge_mos_c: str
     motor_i: str  # 电机电流
     tick: int
     count: int
@@ -79,27 +81,39 @@ class SenseData:
         if not line.startswith(prefix):
             return None
         body = line[len(prefix) :]
+        required_keys = {
+            "BATT_NTC", "BATT_V", "MCU_C", "LM51770_C", "MP4317_C",
+            "DRV8874_C", "CHARGE_MOS_C", "MOTOR_I", "TICK", "COUNT",
+            "STK_AT", "STK_SENSOR", "STK_MOTOR", "TX_SP", "TX_LS",
+        }
         fields: dict[str, str] = {}
         for kv in body.split(","):
             if "=" not in kv:
-                continue
+                return None
             k, v = kv.split("=", 1)
-            fields[k.strip()] = v.strip()
+            key = k.strip()
+            if key in fields:
+                return None
+            fields[key] = v.strip()
+        if fields.keys() != required_keys:
+            return None
         try:
             return cls(
-                batt_ntc=fields.get("BATT_NTC", ""),
-                batt_v=fields.get("BATT_V", ""),
-                ntc1_c=fields.get("NTC1_C", ""),
-                ntc2_c=fields.get("NTC2_C", ""),
-                ntc3_c=fields.get("NTC3_C", ""),
-                motor_i=fields.get("MOTOR_I", ""),
-                tick=int(fields.get("TICK", "0")),
-                count=int(fields.get("COUNT", "0")),
-                stk_at=int(fields.get("STK_AT", "0")),
-                stk_sensor=int(fields.get("STK_SENSOR", "0")),
-                stk_motor=int(fields.get("STK_MOTOR", "0")),
-                tx_sp=int(fields.get("TX_SP", "0")),
-                tx_ls=int(fields.get("TX_LS", "0")),
+                batt_ntc=fields["BATT_NTC"],
+                batt_v=fields["BATT_V"],
+                mcu_c=fields["MCU_C"],
+                lm51770_c=fields["LM51770_C"],
+                mp4317_c=fields["MP4317_C"],
+                drv8874_c=fields["DRV8874_C"],
+                charge_mos_c=fields["CHARGE_MOS_C"],
+                motor_i=fields["MOTOR_I"],
+                tick=int(fields["TICK"]),
+                count=int(fields["COUNT"]),
+                stk_at=int(fields["STK_AT"]),
+                stk_sensor=int(fields["STK_SENSOR"]),
+                stk_motor=int(fields["STK_MOTOR"]),
+                tx_sp=int(fields["TX_SP"]),
+                tx_ls=int(fields["TX_LS"]),
             )
         except (KeyError, ValueError):
             return None

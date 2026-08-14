@@ -30,7 +30,7 @@ from .transport import FakeSerialTransport
 class FakeFirmware(QObject):
     """模拟固件行为."""
 
-    VERSION = "release-v3.0-fake"
+    VERSION = "release-v3.2"
 
     def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -102,13 +102,17 @@ class FakeFirmware(QObject):
             t = time.monotonic()
             batt_v = 36.5 + 0.5 * math.sin(t / 3.0)
             batt_ntc = 25.0 + 0.3 * math.sin(t / 5.0)
-            ntc1 = 24.5 + 0.4 * math.sin(t / 4.0)
-            ntc2 = -2.0 + 0.2 * math.sin(t / 6.0)
-            ntc3 = 26.0 + 0.5 * math.sin(t / 7.0)
+            mcu_c = 31.0 + 0.4 * math.sin(t / 4.0)
+            lm51770_c = 34.0 + 0.5 * math.sin(t / 5.0)
+            mp4317_c = 36.0 + 0.6 * math.sin(t / 6.0)
+            drv8874_c = 38.0 + 0.7 * math.sin(t / 7.0)
+            charge_mos_c = 40.0 + 0.8 * math.sin(t / 8.0)
             motor_i = 1.5 if self._motor_mode in ("FWD", "REV") else 0.0
             sense = (
                 f"+SENSE:BATT_NTC={batt_ntc:.1f}C,BATT_V={batt_v:.1f}V,"
-                f"NTC1_C={ntc1:.1f}C,NTC2_C={ntc2:.1f}C,NTC3_C={ntc3:.1f}C,"
+                f"MCU_C={mcu_c:.1f}C,LM51770_C={lm51770_c:.1f}C,"
+                f"MP4317_C={mp4317_c:.1f}C,DRV8874_C={drv8874_c:.1f}C,"
+                f"CHARGE_MOS_C={charge_mos_c:.1f}C,"
                 f"MOTOR_I={motor_i:.1f}A,TICK={tick},COUNT={self._sense_count},"
                 f"STK_AT=200,STK_SENSOR=180,STK_MOTOR=160,TX_SP=0,TX_LS=0"
             )

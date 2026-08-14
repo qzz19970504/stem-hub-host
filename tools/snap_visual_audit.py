@@ -25,9 +25,11 @@ def _seed_plot(window: MainWindow) -> None:
         values = {
             "batt_v": 36.4 + math.sin(index / 17) * 0.45,
             "batt_ntc": 41.0 + math.sin(index / 23) * 1.8,
-            "ntc1_c": 38.0 + math.cos(index / 21) * 1.4,
-            "ntc2_c": 50.0 + math.sin(index / 14) * 2.3,
-            "ntc3_c": 45.0 + math.cos(index / 18) * 1.9,
+            "mcu_c": 38.0 + math.cos(index / 21) * 1.4,
+            "lm51770_c": 50.0 + math.sin(index / 14) * 2.3,
+            "mp4317_c": 45.0 + math.cos(index / 18) * 1.9,
+            "drv8874_c": 47.0 + math.sin(index / 16) * 1.7,
+            "charge_mos_c": 49.0 + math.cos(index / 19) * 2.1,
             "motor_i": 12.0 + math.sin(index / 8) * 2.0,
         }
         for name, value in values.items():
@@ -41,9 +43,11 @@ def _seed_console(window: MainWindow) -> None:
     controller._latest_sense = SenseData(
         batt_ntc="42.5C",
         batt_v="37.0V",
-        ntc1_c="38.1C",
-        ntc2_c="51.2C",
-        ntc3_c="45.8C",
+        mcu_c="38.1C",
+        lm51770_c="51.2C",
+        mp4317_c="45.8C",
+        drv8874_c="47.3C",
+        charge_mos_c="49.4C",
         motor_i="14.2A",
         tick=12345,
         count=6789,
@@ -70,7 +74,7 @@ def _seed_console(window: MainWindow) -> None:
     console.append_log("RX", "OK")
     console.append_log("TX", "AT+GET=VOLTAGE")
     console.append_log("RX", "37.0V")
-    console.append_info("handshake ok: firmware release-v3.0")
+    console.append_info("handshake ok: firmware release-v3.2")
 
 
 def main() -> None:
@@ -89,7 +93,7 @@ def main() -> None:
         b"UART bridge ready\r\nRX 54 45 53 54\r\ntelemetry packet: ok\r\n"
     )
     window.show()
-    window.console_tab.serial_bar.set_handshake_ok("release-v3.0")
+    window.console_tab.serial_bar.set_handshake_ok("release-v3.2")
     window._apply_handshake_gate(connected=True)
 
     captures = [

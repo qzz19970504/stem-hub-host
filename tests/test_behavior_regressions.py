@@ -26,7 +26,8 @@ def _app() -> QApplication:
 def test_disconnect_clears_controller_telemetry_cache() -> None:
     controller = Controller(SerialWorker(FakeSerialTransport()))
     controller._latest_sense = SenseData(
-        "42.0C", "37.0V", "38.0C", "39.0C", "40.0C", "1.0A",
+        "42.0C", "37.0V", "38.0C", "39.0C", "40.0C", "41.0C",
+        "42.0C", "1.0A",
         1, 1, 0, 0, 0, 0, 0,
     )
     controller._latest_motor = MotorState("FWD", 1000, 0, 0)
@@ -39,6 +40,32 @@ def test_disconnect_clears_controller_telemetry_cache() -> None:
         "motor": None,
         "fault": None,
     }
+
+
+def test_data_buffer_ingests_all_semantic_channels_once_per_tick() -> None:
+    buffer = DataBuffer()
+    sense = SenseData(
+        "25.0C", "37.0V", "31.0C", "32.0C", "33.0C", "34.0C",
+        "35.0C", "1.5A",
+        100, 1, 200, 180, 160, 0, 0,
+    )
+
+    buffer.feed_sense(sense)
+    buffer.feed_sense(sense)
+
+    expected = {
+        "batt_v": 37.0,
+        "batt_ntc": 25.0,
+        "mcu_c": 31.0,
+        "lm51770_c": 32.0,
+        "mp4317_c": 33.0,
+        "drv8874_c": 34.0,
+        "charge_mos_c": 35.0,
+        "motor_i": 1.5,
+    }
+    assert set(buffer.series) == set(expected)
+    for channel, value in expected.items():
+        assert list(buffer.series[channel].values) == [value]
 
 
 def test_uart_single_bridge_closes_other_channel_first() -> None:
@@ -480,7 +507,7 @@ def test_fast_reconnect_cancels_stale_delayed_handshake() -> None:
     assert worker.open("FAKE1", 115200)
     QTimer.singleShot(
         240,
-        lambda: transport.feed(b"+VERSION:release-v3.0\r\nOK\r\n"),
+        lambda: transport.feed(b"+VERSION:release-v3.2\r\nOK\r\n"),
     )
     QTest.qWait(320)
 

@@ -1,4 +1,4 @@
-"""Animated 2×2 temperature sensor card."""
+"""Animated 3×2 card for six semantic temperature readings."""
 from __future__ import annotations
 
 from typing import Optional
@@ -272,7 +272,7 @@ class TempTile(QFrame):
 
 
 class TempGridCard(QFrame):
-    """Responsive 2×2 grid of temperature sensors."""
+    """Responsive 3×2 grid of six semantic temperature sensors."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -285,38 +285,48 @@ class TempGridCard(QFrame):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        grid = QGridLayout()
-        grid.setSpacing(theme.GRID_GAP)
-        outer.addLayout(grid, 1)
+        self.grid = QGridLayout()
+        self.grid.setSpacing(theme.GRID_GAP)
+        outer.addLayout(self.grid, 1)
 
-        self.tile_batt = TempTile("BATTERY")
-        self.tile_ntc1 = TempTile("NTC1")
-        self.tile_ntc2 = TempTile("NTC2")
-        self.tile_ntc3 = TempTile("NTC3")
+        self.tile_battery = TempTile("BATTERY")
+        self.tile_mcu = TempTile("MCU")
+        self.tile_lm51770 = TempTile("LM51770")
+        self.tile_mp4317 = TempTile("MP4317")
+        self.tile_drv8874 = TempTile("DRV8874")
+        self.tile_charge_mos = TempTile("CHG MOS")
 
-        grid.addWidget(self.tile_batt, 0, 0)
-        grid.addWidget(self.tile_ntc1, 0, 1)
-        grid.addWidget(self.tile_ntc2, 1, 0)
-        grid.addWidget(self.tile_ntc3, 1, 1)
+        self.grid.addWidget(self.tile_battery, 0, 0)
+        self.grid.addWidget(self.tile_mcu, 0, 1)
+        self.grid.addWidget(self.tile_lm51770, 1, 0)
+        self.grid.addWidget(self.tile_mp4317, 1, 1)
+        self.grid.addWidget(self.tile_drv8874, 2, 0)
+        self.grid.addWidget(self.tile_charge_mos, 2, 1)
 
     def update_from_sense(self, sense) -> None:
         if sense is None:
             for tile in self._tiles():
                 tile.set_value(None, animate=False)
             return
-        self.tile_batt.set_value(parse_celsius(sense.batt_ntc))
-        self.tile_ntc1.set_value(parse_celsius(sense.ntc1_c))
-        self.tile_ntc2.set_value(parse_celsius(sense.ntc2_c))
-        self.tile_ntc3.set_value(parse_celsius(sense.ntc3_c))
+        self.tile_battery.set_value(parse_celsius(sense.batt_ntc))
+        self.tile_mcu.set_value(parse_celsius(sense.mcu_c))
+        self.tile_lm51770.set_value(parse_celsius(sense.lm51770_c))
+        self.tile_mp4317.set_value(parse_celsius(sense.mp4317_c))
+        self.tile_drv8874.set_value(parse_celsius(sense.drv8874_c))
+        self.tile_charge_mos.set_value(parse_celsius(sense.charge_mos_c))
 
     def refresh_theme(self) -> None:
         for tile in self._tiles():
             tile.refresh_theme()
 
-    def _tiles(self) -> tuple[TempTile, TempTile, TempTile, TempTile]:
+    def _tiles(
+        self,
+    ) -> tuple[TempTile, TempTile, TempTile, TempTile, TempTile, TempTile]:
         return (
-            self.tile_batt,
-            self.tile_ntc1,
-            self.tile_ntc2,
-            self.tile_ntc3,
+            self.tile_battery,
+            self.tile_mcu,
+            self.tile_lm51770,
+            self.tile_mp4317,
+            self.tile_drv8874,
+            self.tile_charge_mos,
         )

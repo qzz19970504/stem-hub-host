@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import ast
+import inspect
+import textwrap
+
 import pytest
 from PySide6.QtGui import QColor, QImage
 
@@ -60,8 +64,51 @@ def test_compare_images_accepts_identical_images() -> None:
 def test_visual_audit_console_seed_spans_temperature_bands() -> None:
     values = getattr(visual_audit, "CONSOLE_TEMPERATURES", ())
 
-    assert values == (12.0, 36.0, 58.0, 84.0)
+    assert values == (12.0, 36.0, 58.0, 84.0, 47.0, 49.0)
     assert len({
         theme.temp_color(value)
         for value in values
     }) == 4
+
+
+def test_visual_audit_console_seed_preserves_settled_temperature_subset() -> None:
+    settled_values = getattr(visual_audit, "SETTLED_CONSOLE_TEMPERATURES", ())
+
+    assert settled_values == visual_audit.CONSOLE_TEMPERATURES[:4]
+
+
+def test_visual_audit_console_seed_uses_semantic_temperature_names() -> None:
+    source = inspect.getsource(visual_audit._seed_connected)
+    function_tree = ast.parse(textwrap.dedent(source))
+    sense_call = next(
+        node
+        for node in ast.walk(function_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "SenseData"
+    )
+    expected_temperature_variables = {
+        "batt_ntc": "battery_temperature",
+        "mcu_c": "mcu_temperature",
+        "lm51770_c": "lm51770_temperature",
+        "mp4317_c": "mp4317_temperature",
+        "drv8874_c": "drv8874_temperature",
+        "charge_mos_c": "charge_mos_temperature",
+    }
+    temperature_variables = {
+        keyword.arg: [
+            node.id
+            for node in ast.walk(keyword.value)
+            if isinstance(node, ast.Name)
+        ]
+        for keyword in sense_call.keywords
+        if keyword.arg in expected_temperature_variables
+    }
+
+    assert temperature_variables == {
+        field: [variable]
+        for field, variable in expected_temperature_variables.items()
+    }
+    assert "ntc1_temp" not in source
+    assert "ntc2_temp" not in source
+    assert "ntc3_temp" not in source

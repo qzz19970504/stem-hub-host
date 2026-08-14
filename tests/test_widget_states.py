@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +13,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from stem_hub_host.data_buffer import DataBuffer
+from stem_hub_host.models import SenseData
 from stem_hub_host.ui import theme
 from stem_hub_host.ui.stylesheet import get_qss, invalidate_cache
 from stem_hub_host.ui.tab2_plot import PlotTab
@@ -32,6 +32,27 @@ def qapp() -> QApplication:
     invalidate_cache()
     app.setStyleSheet(get_qss())
     return app
+
+
+@pytest.fixture
+def semantic_sense() -> SenseData:
+    return SenseData(
+        batt_ntc="40.0C",
+        batt_v="28.0V",
+        mcu_c="41.0C",
+        lm51770_c="42.0C",
+        mp4317_c="43.0C",
+        drv8874_c="44.0C",
+        charge_mos_c="45.0C",
+        motor_i="1.0A",
+        tick=1,
+        count=2,
+        stk_at=3,
+        stk_sensor=4,
+        stk_motor=5,
+        tx_sp=6,
+        tx_ls=7,
+    )
 
 
 def test_motor_buttons_follow_confirmed_mode(qapp: QApplication) -> None:
@@ -179,35 +200,69 @@ def test_terminal_has_only_outer_card_and_named_command_bar(
     qapp.processEvents()
 
 
-def test_temperature_tiles_use_hardware_channel_names(
+def test_temperature_tiles_use_semantic_hardware_names_in_order(
     qapp: QApplication,
 ) -> None:
     grid = TempGridCard()
 
-    assert grid.tile_batt.title_label.text() == "BATTERY"
-    assert [
-        grid.tile_ntc1.title_label.text(),
-        grid.tile_ntc2.title_label.text(),
-        grid.tile_ntc3.title_label.text(),
-    ] == ["NTC1", "NTC2", "NTC3"]
+    assert tuple(tile.title_label.text() for tile in grid._tiles()) == (
+        "BATTERY",
+        "MCU",
+        "LM51770",
+        "MP4317",
+        "DRV8874",
+        "CHG MOS",
+    )
     grid.deleteLater()
     qapp.processEvents()
 
 
-def test_temperature_tiles_follow_the_matching_ntc_fields(
+def test_temperature_tiles_follow_the_matching_semantic_fields(
+    qapp: QApplication,
+    semantic_sense: SenseData,
+) -> None:
+    grid = TempGridCard()
+    grid.update_from_sense(semantic_sense)
+
+    assert tuple(tile.value_label.text() for tile in grid._tiles()) == (
+        "40.0°C",
+        "41.0°C",
+        "42.0°C",
+        "43.0°C",
+        "44.0°C",
+        "45.0°C",
+    )
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_temperature_tiles_reset_all_semantic_channels_without_data(
+    qapp: QApplication,
+    semantic_sense: SenseData,
+) -> None:
+    grid = TempGridCard()
+    grid.update_from_sense(semantic_sense)
+
+    grid.update_from_sense(None)
+
+    assert all(tile.value_label.text() == "--" for tile in grid._tiles())
+    assert all(tile.gauge.celsius is None for tile in grid._tiles())
+    assert all(tile.gauge.level == 0.0 for tile in grid._tiles())
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_temperature_tiles_use_exact_three_by_two_positions(
     qapp: QApplication,
 ) -> None:
     grid = TempGridCard()
-    grid.update_from_sense(SimpleNamespace(
-        batt_ntc="40.0C",
-        ntc1_c="41.0C",
-        ntc2_c="42.0C",
-        ntc3_c="43.0C",
-    ))
 
-    assert grid.tile_ntc1.value_label.text() == "41.0°C"
-    assert grid.tile_ntc2.value_label.text() == "42.0°C"
-    assert grid.tile_ntc3.value_label.text() == "43.0°C"
+    assert grid.grid.itemAtPosition(0, 0).widget() is grid.tile_battery
+    assert grid.grid.itemAtPosition(0, 1).widget() is grid.tile_mcu
+    assert grid.grid.itemAtPosition(1, 0).widget() is grid.tile_lm51770
+    assert grid.grid.itemAtPosition(1, 1).widget() is grid.tile_mp4317
+    assert grid.grid.itemAtPosition(2, 0).widget() is grid.tile_drv8874
+    assert grid.grid.itemAtPosition(2, 1).widget() is grid.tile_charge_mos
     grid.deleteLater()
     qapp.processEvents()
 
@@ -219,12 +274,7 @@ def test_temperature_tiles_use_animated_thermal_gauges(
 
     assert all(
         hasattr(tile, "gauge")
-        for tile in (
-            grid.tile_batt,
-            grid.tile_ntc1,
-            grid.tile_ntc2,
-            grid.tile_ntc3,
-        )
+        for tile in grid._tiles()
     )
 
     for value, expected in (
@@ -234,12 +284,34 @@ def test_temperature_tiles_use_animated_thermal_gauges(
         (100.0, 1.0),
         (125.0, 1.0),
     ):
-        grid.tile_batt.set_value(value, animate=False)
-        assert grid.tile_batt.gauge.celsius == value
-        assert grid.tile_batt.gauge.level == pytest.approx(expected)
+        for tile in grid._tiles():
+            tile.set_value(value, animate=False)
+            assert tile.gauge.celsius == value
+            assert tile.gauge.level == pytest.approx(expected)
 
-    grid.tile_batt.set_value(None, animate=False)
-    assert grid.tile_batt.gauge.level == 0.0
+    for tile in grid._tiles():
+        tile.set_value(None, animate=False)
+        assert tile.gauge.level == 0.0
+    grid.deleteLater()
+    qapp.processEvents()
+
+
+def test_temperature_theme_refresh_updates_all_semantic_tiles(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    grid = TempGridCard()
+    refreshed_tiles = []
+    for tile in grid._tiles():
+        monkeypatch.setattr(
+            tile,
+            "refresh_theme",
+            lambda current_tile=tile: refreshed_tiles.append(current_tile),
+        )
+
+    grid.refresh_theme()
+
+    assert refreshed_tiles == list(grid._tiles())
     grid.deleteLater()
     qapp.processEvents()
 
@@ -270,7 +342,7 @@ def test_temperature_value_text_follows_current_band(
     qapp: QApplication,
 ) -> None:
     grid = TempGridCard()
-    tile = grid.tile_batt
+    tile = grid.tile_battery
     tile.set_value(72.0, animate=False)
 
     expected = QColor(theme.temp_color(72.0)).name()
@@ -284,8 +356,8 @@ def test_temperature_gauge_is_neutral_without_sensor_data(
     qapp: QApplication,
 ) -> None:
     grid = TempGridCard()
-    grid.tile_batt.set_value(None, animate=False)
-    image = grid.tile_batt.gauge.grab().toImage()
+    grid.tile_battery.set_value(None, animate=False)
+    image = grid.tile_battery.gauge.grab().toImage()
     neutral = image.pixelColor(17, 20)
 
     assert neutral.name() == QColor(theme.BG_INPUT).name()
@@ -298,11 +370,11 @@ def test_temperature_column_uses_current_band_color_at_exact_level(
     qapp: QApplication,
 ) -> None:
     grid = TempGridCard()
-    gauge = grid.tile_batt.gauge
+    gauge = grid.tile_battery.gauge
     samples = {}
 
     for value in (25.0, 72.0):
-        grid.tile_batt.set_value(value, animate=False)
+        grid.tile_battery.set_value(value, animate=False)
         assert gauge.level == pytest.approx(value / 100.0)
         image = gauge.grab().toImage()
         samples[value] = image.pixelColor(17, 66)
