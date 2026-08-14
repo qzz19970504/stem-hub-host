@@ -26,7 +26,8 @@ from .ui.main_window import MainWindow
 TOOL_VERSION = 1
 FIXED_VIEW_SIZE = (1600, 900)
 FULLSCREEN_AUDIT_SIZE = (1920, 1080)
-CONSOLE_TEMPERATURES = (12.0, 36.0, 58.0, 84.0)
+CONSOLE_TEMPERATURES = (12.0, 36.0, 58.0, 84.0, 47.0, 49.0)
+SETTLED_CONSOLE_TEMPERATURES = CONSOLE_TEMPERATURES[:4]
 
 
 @dataclass(frozen=True)
@@ -73,15 +74,22 @@ def _clear_console(window: MainWindow) -> None:
 
 def _seed_connected(window: MainWindow) -> None:
     controller = window._controller
-    batt_temp, ntc1_temp, ntc2_temp, ntc3_temp = CONSOLE_TEMPERATURES
+    (
+        battery_temperature,
+        mcu_temperature,
+        lm51770_temperature,
+        mp4317_temperature,
+        drv8874_temperature,
+        charge_mos_temperature,
+    ) = CONSOLE_TEMPERATURES
     sense = SenseData(
-        batt_ntc=f"{batt_temp:.1f}C",
+        batt_ntc=f"{battery_temperature:.1f}C",
         batt_v="37.0V",
-        mcu_c=f"{ntc1_temp:.1f}C",
-        lm51770_c=f"{ntc2_temp:.1f}C",
-        mp4317_c=f"{ntc3_temp:.1f}C",
-        drv8874_c="47.0C",
-        charge_mos_c="49.0C",
+        mcu_c=f"{mcu_temperature:.1f}C",
+        lm51770_c=f"{lm51770_temperature:.1f}C",
+        mp4317_c=f"{mp4317_temperature:.1f}C",
+        drv8874_c=f"{drv8874_temperature:.1f}C",
+        charge_mos_c=f"{charge_mos_temperature:.1f}C",
         motor_i="14.2A",
         tick=12345,
         count=6789,
@@ -108,7 +116,7 @@ def _seed_connected(window: MainWindow) -> None:
     battery_ring._set_glow_phase(0.5)
     for tile, value in zip(
         window.console_tab.temp_grid._tiles(),
-        CONSOLE_TEMPERATURES,
+        SETTLED_CONSOLE_TEMPERATURES,
     ):
         tile.set_value(value, animate=False)
 
