@@ -1,14 +1,14 @@
 # stem-hub 上位机
 
-STM32 `stem-hub` 固件的 Qt Python 上位机（PySide6）。当前对应
-`release-v3.1` 固件；完整协议见本仓的
+STM32 `stem-hub` 固件的 Qt Python 上位机（PySide6）。当前精确匹配
+`release-v3.2` 固件；完整协议见本仓的
 [电源路径 AT 契约](docs/power-path-at-contract.md)和固件仓的
 [上位机AT命令文档](../stem-hub/上位机AT命令文档.md)。
 
 ## 功能
 
-- **控制台 (Tab 1)**：电池电量 / 温度 / NTC 框图，CHARGE / DRIVE 互斥模式切换，电机驱动状态 + 控制，NMOS1/2、全关、nFAULT/nFLT 状态和 AT 指令输入框
-- **实时图表 (Tab 2)**：可调频率（默认 2 Hz）拉取 `AT+SENSE?` 滚动绘图，可选显示哪些量
+- **控制台 (Tab 1)**：电池电量与六张 3×2 语义温度卡（电池、MCU、LM51770、MP4317、DRV8874、充电 MOS），CHARGE / DRIVE 互斥模式切换，电机驱动状态 + 控制，NMOS1/2、全关、nFAULT/nFLT 状态和 AT 指令输入框
+- **实时图表 (Tab 2)**：可调频率（默认 1 Hz）拉取 `AT+SENSE?` 滚动绘图；DataBuffer 与图表提供 `batt_v`、`batt_ntc`、`mcu_c`、`lm51770_c`、`mp4317_c`、`drv8874_c`、`charge_mos_c`、`motor_i` 八个通道
 - **UART 透传 (Tab 3)**：UART2 / UART3 / 2&3 桥接开关 + 透传收发面板
 
 ## 快速开始
@@ -86,11 +86,13 @@ stem-hub-host/
 简要：
 
 - 串口 UART1 = 115200 8N1，AT 命令必须大写、**无空格**、`\r\n` 结尾
-- 握手：`AT+VERSION?` → 只接受 `+VERSION:release-v3.x` + `OK`；v2.x 固件会以不兼容版本拒绝连接，避免新 UI 向旧协议发送无效电源命令
+- 握手：`AT+VERSION?` → 只接受精确的 `+VERSION:release-v3.2` + `OK`
 - 电源模式仅发送一条命令：`AT+CHARGE=ON/OFF`、`AT+DRIVE=ON/OFF` 或 `AT+POWER=OFF`
 - `CHARGE=ON` 表示启动 MCU 内固定 10 秒开 / 50 秒关的间歇充电循环；UI 开关表示循环已启用，不表示 LM51770 此刻必为开启
 - `DRIVE=ON` 与每次充电重新开启都由 MCU 执行“先全关、后单路打开”，上位机不编排芯片级时序
-- 周期查询：`AT+SENSE?` 返回 `+SENSE:...` + `OK`；五路传感 ADC 是最近五个完整成功采样周期的同步滑动均值
+- 周期查询：`AT+SENSE?` 返回 `+SENSE:...` + `OK`；解析器要求完整语义字段集合，不兼容旧的编号 NTC 字段。固件按 `BATT_NTC,BATT_V,MCU_C,LM51770_C,MP4317_C,DRV8874_C,CHARGE_MOS_C,MOTOR_I,TICK,COUNT,STK_AT,STK_SENSOR,STK_MOTOR,TX_SP,TX_LS` 顺序发送
+- BATT_NTC、BATT_V 与五路器件 NTC 构成同步七通道 1 Hz 滚动窗口：最近五个完整周期求均值；部分周期不推进、不发布。电池通道失败而五路器件通道成功时，只生成过温保护预览，不发布 SENSE
+- MCU、LM51770、MP4317、DRV8874、充电 MOS 五路受保护器件温度任一路 >60.0°C、无效或读取失败即安全停机；五路全部有效且 ≤55.0°C 才清除。电池 NTC 仅显示
 - 控制命令单条发完等回包；旧的 `AT+LM51770` / `AT+MP4317` 指令会被固件拒绝
 
 ## 视觉回归

@@ -6,7 +6,7 @@
 
 用法:
     plot = PlotWidget(compact=True)
-    plot.set_channels(['batt_v', 'ntc1_c'])
+    plot.set_channels(['batt_v', 'mcu_c'])
     plot.update_from_buffer(buffer)  # 每次新数据来时调
 """
 from __future__ import annotations

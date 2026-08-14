@@ -34,7 +34,7 @@ class AtError:
 # ---- 握手 ----
 @dataclass(frozen=True)
 class VersionInfo:
-    """`+VERSION:release-v3.0` 响应."""
+    """`+VERSION:release-v3.2` 响应."""
 
     version: str
 
