@@ -1,6 +1,6 @@
 """传感器数据环形缓冲 + 多通道管理.
 
-每个通道 (e.g. 'batt_v', 'ntc1_c') 存一组 (timestamp, value).
+每个通道 (e.g. 'batt_v', 'mcu_c') 存一组 (timestamp, value).
 默认保留最近 5 分钟数据, 自动滚动.
 """
 from __future__ import annotations
@@ -50,9 +50,11 @@ class DataBuffer:
     CHANNELS = {
         "batt_v":   ("#4ade80", "V"),
         "batt_ntc": ("#60a5fa", "°C"),
-        "ntc1_c":   ("#facc15", "°C"),
-        "ntc2_c":   ("#fb923c", "°C"),
-        "ntc3_c":   ("#f87171", "°C"),
+        "mcu_c":        ("#facc15", "°C"),
+        "lm51770_c":    ("#fb923c", "°C"),
+        "mp4317_c":     ("#f87171", "°C"),
+        "drv8874_c":    ("#2dd4bf", "°C"),
+        "charge_mos_c": ("#f472b6", "°C"),
         "motor_i":  ("#a78bfa", "A"),
     }
 
@@ -85,9 +87,11 @@ class DataBuffer:
         for name, parser in [
             ("batt_v", parse_volts),
             ("batt_ntc", parse_celsius),
-            ("ntc1_c", parse_celsius),
-            ("ntc2_c", parse_celsius),
-            ("ntc3_c", parse_celsius),
+            ("mcu_c", parse_celsius),
+            ("lm51770_c", parse_celsius),
+            ("mp4317_c", parse_celsius),
+            ("drv8874_c", parse_celsius),
+            ("charge_mos_c", parse_celsius),
             ("motor_i", parse_amps),
         ]:
             raw = getattr(sense, name)

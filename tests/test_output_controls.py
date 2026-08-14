@@ -130,13 +130,24 @@ def test_power_off_failure_restores_confirmed_drive_without_key_error(
     assert card.is_on("DRIVE")
 
 
-def test_sensor_and_fault_data_drive_honest_indicators(window: MainWindow) -> None:
+def test_sensor_and_fault_data_drive_honest_indicators(
+    window: MainWindow,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The semantic tile layout is migrated in Task 4; isolate this fault test.
+    monkeypatch.setattr(
+        window.console_tab.temp_grid,
+        "update_from_sense",
+        lambda _: None,
+    )
     window._controller._latest_sense = SenseData(
         batt_ntc="82.0C",
         batt_v="29.0V",
-        ntc1_c="30.0C",
-        ntc2_c="31.0C",
-        ntc3_c="32.0C",
+        mcu_c="30.0C",
+        lm51770_c="31.0C",
+        mp4317_c="32.0C",
+        drv8874_c="33.0C",
+        charge_mos_c="34.0C",
         motor_i="2.9A",
         tick=1,
         count=1,

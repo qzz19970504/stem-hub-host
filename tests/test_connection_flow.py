@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from PySide6.QtCore import QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QMessageBox
@@ -72,7 +74,7 @@ def test_success_cancels_deadline_and_starts_polling() -> None:
     assert worker.open("FAKE0", 115200)
     QTimer.singleShot(
         5,
-        lambda: transport.feed(b"+VERSION:release-v3.0\r\nOK\r\n"),
+        lambda: transport.feed(b"+VERSION:release-v3.2\r\nOK\r\n"),
     )
     QTest.qWait(60)
 
@@ -85,7 +87,11 @@ def test_success_cancels_deadline_and_starts_polling() -> None:
     worker.close()
 
 
-def test_v2_firmware_does_not_pass_v3_power_protocol_gate() -> None:
+@pytest.mark.parametrize(
+    "version",
+    ["release-v3.1", "release-v3.0", "release-v2.2"],
+)
+def test_older_firmware_does_not_pass_v3_2_power_protocol_gate(version: str) -> None:
     transport, worker, controller = _short_controller()
     failures: list[str] = []
     controller.handshake_failed.connect(failures.append)
@@ -93,7 +99,7 @@ def test_v2_firmware_does_not_pass_v3_power_protocol_gate() -> None:
     assert worker.open("FAKE0", 115200)
     QTimer.singleShot(
         5,
-        lambda: transport.feed(b"+VERSION:release-v2.2\r\nOK\r\n"),
+        lambda: transport.feed(f"+VERSION:{version}\r\nOK\r\n".encode()),
     )
     QTest.qWait(60)
 
@@ -156,7 +162,7 @@ def test_fast_reconnect_ignores_old_connection_timers() -> None:
     assert worker.open("FAKE1", 115200)
     QTimer.singleShot(
         5,
-        lambda: transport.feed(b"+VERSION:release-v3.0\r\nOK\r\n"),
+        lambda: transport.feed(b"+VERSION:release-v3.2\r\nOK\r\n"),
     )
     QTest.qWait(160)
 

@@ -42,14 +42,15 @@ def main():
     def take_screenshot():
         controller._latest_sense = SenseData(
             batt_ntc="42.5C", batt_v="37.0V",
-            ntc1_c="38.1C", ntc2_c="51.2C", ntc3_c="45.8C",
+            mcu_c="38.1C", lm51770_c="51.2C", mp4317_c="45.8C",
+            drv8874_c="47.3C", charge_mos_c="49.4C",
             motor_i="14.2A", tick=12345, count=6789,
             stk_at=10, stk_sensor=20, stk_motor=30, tx_sp=40, tx_ls=50,
         )
         controller._latest_motor = MotorState(mode="FWD", current_ma=14200, overcurrent=0, fault=0)
         controller._latest_fault = FaultState(drv=0, aux=0)
         win._refresh_ui_from_state()
-        win.console_tab.serial_bar.set_handshake_ok("release-v3.0")
+        win.console_tab.serial_bar.set_handshake_ok("release-v3.2")
         win._apply_handshake_gate(connected=True)
         win.console_tab.charge_card.set_toggle("DRIVE", True)
         win.console_tab.charge_card.set_toggle("LIGHTS", True)
@@ -64,7 +65,7 @@ def main():
         at.append_log("RX", "14.2A")
         at.append_log("TX", "AT+GET=TEMP_BAT")
         at.append_log("RX", "42.5C")
-        at.append_info("handshake ok: firmware release-v3.0")
+        at.append_info("handshake ok: firmware release-v3.2")
 
         QApplication.processEvents()
         # 等待事件循环跑几帧确保 paint 完成

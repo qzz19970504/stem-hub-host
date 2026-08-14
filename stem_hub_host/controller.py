@@ -37,7 +37,7 @@ from .serial_worker import SerialError, SerialTimeout, SerialWorker
 
 SENSE_HZ_OPTIONS = (0.2, 0.4, 0.6, 0.8, 1.0)
 DEFAULT_SENSE_HZ = 1.0
-POWER_PROTOCOL_VERSION_PREFIX = "release-v3."
+POWER_PROTOCOL_VERSION = "release-v3.2"
 
 
 def normalize_sense_hz(hz: float) -> float:
@@ -702,7 +702,7 @@ class Controller(QObject):
 
     @staticmethod
     def _is_power_protocol_compatible(version: VersionInfo) -> bool:
-        return version.version.startswith(POWER_PROTOCOL_VERSION_PREFIX)
+        return version.version == POWER_PROTOCOL_VERSION
 
     def _reject_incompatible_version(self, version: VersionInfo) -> None:
         self._last_handshake_error = (

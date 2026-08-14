@@ -501,9 +501,11 @@ class MainWindow(QMainWindow):
         if sense is not None:
             temperatures = (
                 parse_celsius(sense.batt_ntc),
-                parse_celsius(sense.ntc1_c),
-                parse_celsius(sense.ntc2_c),
-                parse_celsius(sense.ntc3_c),
+                parse_celsius(sense.mcu_c),
+                parse_celsius(sense.lm51770_c),
+                parse_celsius(sense.mp4317_c),
+                parse_celsius(sense.drv8874_c),
+                parse_celsius(sense.charge_mos_c),
             )
             valid_temperatures = [
                 temperature

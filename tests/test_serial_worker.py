@@ -46,6 +46,8 @@ def test_handshake(fake_pair):
     worker, fw = fake_pair
     resp = worker.send_and_wait(cmd_handshake(), timeout_ms=500)
     assert resp.ok
+    assert fw.VERSION == "release-v3.2"
+    assert resp.version.version == "release-v3.2"
     # 之前 at_data_received 触发过, 但我们直接看 response
 
 

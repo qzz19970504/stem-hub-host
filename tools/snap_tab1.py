@@ -45,14 +45,15 @@ def main() -> None:
         from stem_hub_host.models import FaultState, MotorState, SenseData
         controller._latest_sense = SenseData(
             batt_ntc="42.5C", batt_v="37.0V",
-            ntc1_c="38.1C", ntc2_c="51.2C", ntc3_c="45.8C",
+            mcu_c="38.1C", lm51770_c="51.2C", mp4317_c="45.8C",
+            drv8874_c="47.3C", charge_mos_c="49.4C",
             motor_i="14.2A", tick=12345, count=6789,
             stk_at=10, stk_sensor=20, stk_motor=30, tx_sp=40, tx_ls=50,
         )
         controller._latest_motor = MotorState(mode="FWD", current_ma=14200, overcurrent=0, fault=0)
         controller._latest_fault = FaultState(drv=0, aux=0)
         win._refresh_ui_from_state()
-        win.console_tab.serial_bar.set_handshake_ok("release-v3.0")
+        win.console_tab.serial_bar.set_handshake_ok("release-v3.2")
         # 模拟握手门禁开启
         win._apply_handshake_gate(connected=True)
         # 模拟 toggle
@@ -76,7 +77,7 @@ def main() -> None:
         at.append_log("RX", "14.2A")
         at.append_log("TX", "AT+GET=TEMP_BAT")
         at.append_log("RX", "42.5C")
-        at.append_info("Handshake OK: fw release-v3.0")
+        at.append_info("Handshake OK: fw release-v3.2")
         # 多次 processEvents 让动画跑到目标值
         for _ in range(12):
             QApplication.processEvents()
