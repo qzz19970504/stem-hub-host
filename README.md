@@ -85,7 +85,7 @@ stem-hub-host/
 
 简要：
 
-- 串口 UART1 = 115200 8N1，AT 命令必须大写、**无空格**、`\r\n` 结尾
+- 串口 UART1 = 9600 8N1（现场 baudrate 测试分支），AT 命令必须大写、**无空格**、`\r\n` 结尾
 - 握手：`AT+VERSION?` → 只接受精确的 `+VERSION:release-v3.2` + `OK`
 - 电源模式仅发送一条命令：`AT+CHARGE=ON/OFF`、`AT+DRIVE=ON/OFF` 或 `AT+POWER=OFF`
 - `CHARGE=ON` 表示启动 MCU 内 60 秒间歇充电循环，默认 10 秒开 / 50 秒关；固件可通过 `AT+CHARGE_TIME=n`（`n=1..60`）设置为 `n` 秒开 / `60-n` 秒关，当前上位机没有该设置 UI。CHARGE 开关只表示循环已启用，不表示 LM51770 此刻必为开启
