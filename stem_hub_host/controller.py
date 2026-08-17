@@ -177,7 +177,7 @@ class Controller(QObject):
         self._apply_sense_interval()
         self.sense_request_hz_changed.emit(self._sense_hz)
 
-    def open(self, port: str, baud: int = 115200) -> bool:
+    def open(self, port: str, baud: int = 9600) -> bool:
         ok = self._worker.open(port, baud)
         return ok
 

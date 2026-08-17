@@ -8,7 +8,7 @@
 - 透传行 → 发 passthrough_received signal, 不进 future 队列
 
 高层 API:
-- open(port_name, baudrate=115200) -> bool
+- open(port_name, baudrate=9600) -> bool
 - close()
 - send_and_wait(cmd: str, timeout_ms: int) -> ParsedResponse  (throws on error / timeout)
 - send_only(cmd: str)  (不等回包, 用在状态广播类场景)
@@ -100,7 +100,7 @@ class SerialWorker(QObject):
     def is_resynchronizing(self) -> bool:
         return self._is_resynchronizing
 
-    def open(self, port_name: str, baudrate: int = 115200) -> bool:
+    def open(self, port_name: str, baudrate: int = 9600) -> bool:
         if self._is_open:
             self.close()
         if not self._transport.open(port_name, baudrate):
