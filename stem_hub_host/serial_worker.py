@@ -19,7 +19,6 @@ from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 import math
-import time
 from typing import Callable, Deque, Optional
 
 from PySide6.QtCore import QEventLoop, QObject, QTimer, Signal
@@ -92,7 +91,6 @@ class SerialWorker(QObject):
         self._session_state = SerialSessionState.AT
         self._is_resynchronizing = False
         self._transparent_exit_timeout_ms = 0
-        self._transparent_tx_busy_until = 0.0
         self._transparent_guard_timer = QTimer(self)
         self._transparent_guard_timer.setObjectName("transparentGuardTimer")
         self._transparent_guard_timer.setSingleShot(True)
@@ -143,7 +141,6 @@ class SerialWorker(QObject):
         self._splitter.reset()
         self._pending.clear()
         self._session_state = SerialSessionState.AT
-        self._transparent_tx_busy_until = 0.0
         self._transparent_guard_timer.stop()
         self._resynchronization_timer.stop()
         self._is_resynchronizing = False
@@ -159,7 +156,6 @@ class SerialWorker(QObject):
             self._transport.close()
             self._is_open = False
             self._session_state = SerialSessionState.AT
-            self._transparent_tx_busy_until = 0.0
             self._transparent_guard_timer.stop()
             self._resynchronization_timer.stop()
             self._is_resynchronizing = False
@@ -223,14 +219,6 @@ class SerialWorker(QObject):
             # continuing with divergent session state.
             self.close()
             raise
-        now = time.monotonic()
-        serialization_seconds = (
-            len(data) * UART_FRAME_BITS / self._baudrate
-        )
-        self._transparent_tx_busy_until = (
-            max(now, self._transparent_tx_busy_until)
-            + serialization_seconds
-        )
 
     def exit_transparent(
         self,
@@ -247,11 +235,21 @@ class SerialWorker(QObject):
             raise ValueError("transparent exit timing must be positive")
         self._session_state = SerialSessionState.EXITING
         self._transparent_exit_timeout_ms = timeout_ms
-        remaining_tx_ms = math.ceil(
-            max(0.0, self._transparent_tx_busy_until - time.monotonic())
-            * 1000
-        )
-        self._transparent_guard_timer.start(remaining_tx_ms + guard_ms)
+        try:
+            drained = self._transport.wait_for_bytes_written(timeout_ms)
+        except Exception as error:
+            self.error_occurred.emit(f"等待透明传输写入完成失败: {error}")
+            self.close()
+            return
+        if not drained:
+            self.error_occurred.emit("透明传输写入排空超时，串口已关闭")
+            self.close()
+            return
+        # bytesToWrite()==0 means the final byte has reached the serial driver.
+        # Allow one full 8N1 frame to leave the UART, then begin the required
+        # quiet interval before transmitting the escape sequence.
+        final_frame_ms = math.ceil(UART_FRAME_BITS * 1000 / self._baudrate)
+        self._transparent_guard_timer.start(final_frame_ms + guard_ms)
 
     def _write_transparent_escape(self) -> None:
         if (

@@ -6,6 +6,7 @@ SerialWorker 不直接持有 QSerialPort, 而是通过 Transport 接口.
 """
 from __future__ import annotations
 
+import time
 from typing import Protocol
 
 from PySide6.QtCore import QObject, Signal
@@ -23,6 +24,7 @@ class Transport(Protocol):
     def close(self) -> None: ...
     def is_open(self) -> bool: ...
     def write(self, data: bytes) -> int: ...
+    def wait_for_bytes_written(self, timeout_ms: int) -> bool: ...
     def read_all(self) -> bytes: ...
     def error_string(self) -> str: ...
 
@@ -66,6 +68,17 @@ class RealSerialTransport(QObject):
     def write(self, data: bytes) -> int:
         return self._port.write(data)
 
+    def wait_for_bytes_written(self, timeout_ms: int) -> bool:
+        """Wait until Qt has handed every queued byte to the serial driver."""
+        deadline = time.monotonic() + timeout_ms / 1000
+        while self._port.bytesToWrite() > 0:
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            if remaining_ms <= 0:
+                return False
+            if not self._port.waitForBytesWritten(remaining_ms):
+                return False
+        return True
+
     def read_all(self) -> bytes:
         return bytes(self._port.readAll())
 
@@ -105,6 +118,9 @@ class FakeSerialTransport(QObject):
             self._written = bytearray()
         self._written.extend(data)
         return len(data)
+
+    def wait_for_bytes_written(self, timeout_ms: int) -> bool:
+        return self._is_open
 
     def read_all(self) -> bytes:
         buf = getattr(self, "_rx_buf", bytearray())
