@@ -112,6 +112,18 @@ class TestCommandBuilders:
         with pytest.raises(ValueError, match="transparent mode"):
             at_protocol.cmd_enter_transparent("off")
 
+    @pytest.mark.parametrize(
+        "legacy_name",
+        [
+            "cmd_set_uart2",
+            "cmd_set_uart3",
+            "cmd_set_uart23",
+            "iter_uart_tx_commands",
+        ],
+    )
+    def test_legacy_uart_command_builders_are_removed(self, legacy_name):
+        assert not hasattr(at_protocol, legacy_name)
+
     def test_cmd_raw_no_crlf(self):
         assert cmd_raw("AT+FOO=BAR") == "AT+FOO=BAR\r\n"
 

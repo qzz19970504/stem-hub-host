@@ -50,6 +50,7 @@ class FakeFirmware(QObject):
         self._lm51770 = False
         self._uart2 = False
         self._uart3 = False
+        self._transparent_target: str | None = None
         self._sense_count = 0
         self._tick_start = time.monotonic()
 
@@ -85,8 +86,28 @@ class FakeFirmware(QObject):
             return
         # 取出并清空
         transport._written = bytearray()
+        if self._transparent_target is not None:
+            self._handle_transparent_bytes(written)
+            return
         for line in self._splitter.feed(written):
             self._handle_cmd(line)
+
+    def _handle_transparent_bytes(self, payload: bytes) -> None:
+        """Echo raw downstream bytes through the firmware's framed RX events."""
+        transport = self._worker._transport  # type: ignore[attr-defined]
+        if not isinstance(transport, FakeSerialTransport):
+            return
+        if payload == b"+++":
+            self._transparent_target = None
+            self._uart2 = False
+            self._uart3 = False
+            transport.feed(b"OK" + CRLF.encode())
+            return
+        hexadecimal = payload.hex().upper()
+        if self._uart2:
+            transport.feed(f"+UART2RX:{hexadecimal}{CRLF}".encode())
+        if self._uart3:
+            transport.feed(f"+UART3RX:{hexadecimal}{CRLF}".encode())
 
     def _handle_cmd(self, cmd: str) -> None:
         cmd = cmd.strip()
@@ -181,42 +202,10 @@ class FakeFirmware(QObject):
         elif cmd in ("AT+DRIVE=OFF", "AT+POWER=OFF"):
             self._set_power_mode("off")
             transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+UART2=ON":
-            self._uart2 = True
+        elif cmd in {"AT+TRANS=1", "AT+TRANS=2", "AT+TRANS=1&2"}:
+            self._transparent_target = cmd.partition("=")[2]
+            self._uart2 = self._transparent_target in {"1", "1&2"}
+            self._uart3 = self._transparent_target in {"2", "1&2"}
             transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+UART2=OFF":
-            self._uart2 = False
-            transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+UART3=ON":
-            self._uart3 = True
-            transport.feed(b"OK" + CRLF.encode())
-        elif cmd == "AT+UART3=OFF":
-            self._uart3 = False
-            transport.feed(b"OK" + CRLF.encode())
-        elif cmd in ("AT+UART2&3=ON", "AT+UART23=ON"):
-            self._uart2 = True
-            self._uart3 = True
-            transport.feed(b"OK" + CRLF.encode())
-        elif cmd in ("AT+UART2&3=OFF", "AT+UART23=OFF"):
-            self._uart2 = False
-            self._uart3 = False
-            transport.feed(b"OK" + CRLF.encode())
-        elif cmd.startswith("AT+UARTTX="):
-            value = cmd[len("AT+UARTTX="):]
-            if (
-                not value
-                or len(value) % 2
-                or len(value) > 64
-                or any(char not in "0123456789ABCDEF" for char in value)
-            ):
-                transport.feed(b"ERROR:HEX" + CRLF.encode())
-            elif not self._uart2 and not self._uart3:
-                transport.feed(b"ERROR:UART_DISABLED" + CRLF.encode())
-            else:
-                if self._uart2:
-                    transport.feed(f"+UART2RX:{value}{CRLF}".encode())
-                if self._uart3:
-                    transport.feed(f"+UART3RX:{value}{CRLF}".encode())
-                transport.feed(b"OK" + CRLF.encode())
         else:
             transport.feed(b"ERROR:PARSE" + CRLF.encode())

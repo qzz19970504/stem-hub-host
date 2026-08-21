@@ -89,28 +89,6 @@ def cmd_enter_transparent(mode: str) -> str:
     return f"AT+TRANS={target}{CRLF}"
 
 
-def cmd_set_uart2(on: bool) -> str:
-    return f"AT+UART2={'ON' if on else 'OFF'}{CRLF}"
-
-
-def cmd_set_uart3(on: bool) -> str:
-    return f"AT+UART3={'ON' if on else 'OFF'}{CRLF}"
-
-
-def cmd_set_uart23(on: bool) -> str:
-    """同时开关 UART2 & 3."""
-    return f"AT+UART2&3={'ON' if on else 'OFF'}{CRLF}"
-
-def iter_uart_tx_commands(payload: bytes, chunk_size: int = 32):
-    """Yield acknowledged, binary-safe UART tunnel commands."""
-    if not payload:
-        raise ValueError("UART tunnel payload must not be empty")
-    if chunk_size < 1 or chunk_size > 32:
-        raise ValueError("UART tunnel chunk size must be between 1 and 32")
-    for offset in range(0, len(payload), chunk_size):
-        yield f"AT+UARTTX={payload[offset:offset + chunk_size].hex().upper()}{CRLF}"
-
-
 def cmd_raw(text: str) -> str:
     """用户从 AT 输入框发送的任意命令, 自动补 CRLF 结尾.
 

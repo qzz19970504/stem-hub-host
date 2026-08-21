@@ -222,6 +222,60 @@ def test_transparent_exit_timeout_disconnects_and_resets_state(qapp):
     assert worker.session_state is serial_worker.SerialSessionState.AT
 
 
+def test_rejected_transparent_entry_restores_at_state(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"ERROR:PARSE\r\n")
+
+    assert worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_transparent_port_error_closes_uncertain_session(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+
+    transport.error_occurred.emit(None)
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_rejected_transparent_exit_closes_uncertain_session(qapp):
+    from PySide6.QtTest import QTest
+
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+    worker.exit_transparent(guard_ms=1)
+    deadline = time.monotonic() + 0.2
+    while not transport.get_written().endswith(b"+++"):
+        assert time.monotonic() < deadline
+        QTest.qWait(1)
+
+    transport.feed(b"ERROR:STATE_BUSY\r\n")
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
 def test_sync_timeout_starts_when_queued_command_is_written(qapp):
     from PySide6.QtCore import QTimer
 

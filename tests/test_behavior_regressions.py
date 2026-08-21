@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -21,6 +22,13 @@ from stem_hub_host.ui.widgets.plot_widget import PlotWidget
 
 def _app() -> QApplication:
     return QApplication.instance() or QApplication([])
+
+
+def _wait_until(predicate, timeout_ms: int = 500) -> None:
+    deadline = time.monotonic() + timeout_ms / 1000
+    while not predicate():
+        assert time.monotonic() < deadline
+        QTest.qWait(1)
 
 
 def test_disconnect_clears_controller_telemetry_cache() -> None:
@@ -68,30 +76,32 @@ def test_data_buffer_ingests_all_semantic_channels_once_per_tick() -> None:
         assert list(buffer.series[channel].values) == [value]
 
 
-def test_uart_single_bridge_closes_other_channel_first() -> None:
+def test_uart_entry_uses_one_exact_transparent_command() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
-    assert worker.open("FAKE0", 115200)
+    assert worker.open("FAKE0", 9600)
+    controller._handshake_ok = True
 
     controller.set_passthrough("uart2")
 
-    assert transport.get_written() == b"AT+UART3=OFF\r\n"
+    assert transport.get_written() == b"AT+TRANS=1\r\n"
     transport.feed(b"OK\r\n")
-    assert transport.get_written() == b"AT+UART3=OFF\r\nAT+UART2=ON\r\n"
+    assert controller.passthrough_mode == "uart2"
 
 
-def test_uart_bridge_aborts_enable_when_disable_is_rejected() -> None:
+def test_uart_entry_rejection_returns_to_off() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
-    assert worker.open("FAKE0", 115200)
+    assert worker.open("FAKE0", 9600)
+    controller._handshake_ok = True
     confirmed = QSignalSpy(controller.passthrough_mode_changed)
 
     controller.set_passthrough("uart2")
     transport.feed(b"ERROR:OUTPUT_QUEUE\r\n")
 
-    assert transport.get_written() == b"AT+UART3=OFF\r\n"
+    assert transport.get_written() == b"AT+TRANS=1\r\n"
     assert confirmed.at(0)[0] == "off"
 
 
@@ -162,26 +172,39 @@ def test_passthrough_hex_mode_sends_exact_bytes_and_accepts_lowercase() -> None:
     assert bytes(sent.at(0)[0]) == b"\xff\x00"
 
 
-def test_passthrough_chunks_wait_for_each_ack() -> None:
+def test_passthrough_sends_one_exact_raw_payload() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
-    assert worker.open("FAKE0", 115200)
+    assert worker.open("FAKE0", 9600)
     controller._handshake_ok = True
+    worker.enter_transparent("AT+TRANS=1\r\n")
+    transport.feed(b"OK\r\n")
     controller._apply_passthrough_mode("uart2")
     confirmed = QSignalSpy(controller.passthrough_tx_confirmed)
-    payload = bytes(range(32)) + b"\xff"
+    payload = bytes(range(32)) + b"\xff\x00\r\nabc+++def"
+    before = transport.get_written()
 
     assert controller.send_passthrough_bytes(payload)
-    first = f"AT+UARTTX={bytes(range(32)).hex().upper()}\r\n".encode()
-    assert transport.get_written() == first
+    assert transport.get_written() == before + payload
+    assert confirmed.at(0)[0] == len(payload)
 
-    transport.feed(b"+UART2RX:00\r\nOK\r\n")
-    assert transport.get_written() == first + b"AT+UARTTX=FF\r\n"
-    assert confirmed.at(0)[0] == 32
 
+def test_passthrough_rejects_reserved_escape_payload() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    assert worker.open("FAKE0", 9600)
+    controller._handshake_ok = True
+    worker.enter_transparent("AT+TRANS=1\r\n")
     transport.feed(b"OK\r\n")
-    assert confirmed.at(1)[0] == 1
+    controller._apply_passthrough_mode("uart2")
+    errors = QSignalSpy(controller.error_occurred)
+    before = transport.get_written()
+
+    assert not controller.send_passthrough_bytes(b"+++")
+    assert transport.get_written() == before
+    assert "reserved escape" in errors.at(0)[0]
 
 
 def test_fake_firmware_bidirectional_tunnel_end_to_end() -> None:
@@ -190,21 +213,41 @@ def test_fake_firmware_bidirectional_tunnel_end_to_end() -> None:
     worker = SerialWorker(transport)
     controller = Controller(worker)
     firmware = FakeFirmware(worker)
-    assert worker.open("FAKE0", 115200)
+    assert worker.open("FAKE0", 9600)
     controller._handshake_ok = True
     received = QSignalSpy(worker.uart_rx_received)
     confirmed = QSignalSpy(controller.passthrough_tx_confirmed)
 
     controller.set_passthrough("uart2")
-    QTest.qWait(40)
+    _wait_until(lambda: controller._passthrough_mode == "uart2")
     assert controller._passthrough_mode == "uart2"
 
     assert controller.send_passthrough_bytes(b"\x00\xff")
-    QTest.qWait(30)
+    _wait_until(lambda: received.count() == 1)
 
     assert received.at(0)[0] == 2
     assert bytes(received.at(0)[1]) == b"\x00\xff"
     assert confirmed.at(0)[0] == 2
+    firmware.deleteLater()
+
+
+def test_fake_firmware_guarded_exit_restores_at_mode() -> None:
+    _app()
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    firmware = FakeFirmware(worker)
+    assert worker.open("FAKE0", 9600)
+    controller._handshake_ok = True
+
+    controller.set_passthrough("uart3")
+    _wait_until(lambda: controller.passthrough_mode == "uart3")
+    controller.set_passthrough("off")
+    _wait_until(lambda: controller.passthrough_mode == "off")
+
+    assert worker.session_state.value == "at"
+    assert firmware._transparent_target is None
+    assert not controller._passthrough_transition_active
     firmware.deleteLater()
 
 
@@ -371,28 +414,24 @@ def test_rapid_uart_mode_requests_are_serialized() -> None:
     transport = FakeSerialTransport()
     worker = SerialWorker(transport)
     controller = Controller(worker)
-    assert worker.open("FAKE0", 115200)
+    assert worker.open("FAKE0", 9600)
+    controller._handshake_ok = True
 
     controller.set_passthrough("uart2")
     controller.set_passthrough("uart3")
-    assert transport.get_written() == b"AT+UART3=OFF\r\n"
-
-    for expected_tail in (
-        b"AT+UART2=ON\r\n",
-        b"AT+UART2=OFF\r\n",
-        b"AT+UART3=ON\r\n",
-    ):
-        transport.feed(b"OK\r\n")
-        assert transport.get_written().endswith(expected_tail)
+    assert transport.get_written() == b"AT+TRANS=1\r\n"
+    transport.feed(b"OK\r\n")
+    _wait_until(lambda: transport.get_written().endswith(b"+++"))
+    transport.feed(b"OK\r\n")
+    _wait_until(lambda: transport.get_written().endswith(b"AT+TRANS=2\r\n"))
     transport.feed(b"OK\r\n")
 
     assert transport.get_written() == (
-        b"AT+UART3=OFF\r\n"
-        b"AT+UART2=ON\r\n"
-        b"AT+UART2=OFF\r\n"
-        b"AT+UART3=ON\r\n"
+        b"AT+TRANS=1\r\n"
+        b"+++"
+        b"AT+TRANS=2\r\n"
     )
-    assert not worker._passthrough_raw
+    assert controller.passthrough_mode == "uart3"
 
 
 def test_raw_passthrough_blocks_at_commands_and_gates_main_controls() -> None:
@@ -429,10 +468,10 @@ def test_completed_async_commands_release_timeout_timers() -> None:
     for _ in range(20):
         worker.send_command("AT+LED=OFF\r\n")
         transport.feed(b"OK\r\n")
-    assert [
+    assert sorted(
         timer.objectName()
         for timer in worker.findChildren(QTimer)
-    ] == ["serialResynchronizationTimer"]
+    ) == ["serialResynchronizationTimer", "transparentGuardTimer"]
 
 
 def test_controller_level_errors_reach_terminal_once() -> None:

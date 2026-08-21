@@ -331,8 +331,9 @@ class SerialWorker(QObject):
             self._handle_line(line, raw_line)
 
     def _on_port_error(self) -> None:
-        # transport 端已经过滤 NoError, 这里只管发错误消息
         self.error_occurred.emit(f"串口错误: {self._transport.error_string()}")
+        if self._session_state is not SerialSessionState.AT:
+            self.close()
 
     def _handle_line(self, line: str, raw_line: bytes | None = None) -> None:
         resp = ParsedResponse.parse(line)
