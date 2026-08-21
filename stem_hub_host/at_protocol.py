@@ -75,6 +75,20 @@ def cmd_power_off() -> str:
     return f"AT+POWER=OFF{CRLF}"
 
 
+def cmd_enter_transparent(mode: str) -> str:
+    """Build the exclusive transparent-mode entry command for a UI target."""
+    targets = {
+        "uart2": "1",
+        "uart3": "2",
+        "both": "1&2",
+    }
+    try:
+        target = targets[mode]
+    except KeyError as error:
+        raise ValueError(f"invalid transparent mode: {mode}") from error
+    return f"AT+TRANS={target}{CRLF}"
+
+
 def cmd_set_uart2(on: bool) -> str:
     return f"AT+UART2={'ON' if on else 'OFF'}{CRLF}"
 
