@@ -8,7 +8,7 @@
 - 透传行 → 发 passthrough_received signal, 不进 future 队列
 
 高层 API:
-- open(port_name, baudrate=115200) -> bool
+- open(port_name, baudrate=9600) -> bool
 - close()
 - send_and_wait(cmd: str, timeout_ms: int) -> ParsedResponse  (throws on error / timeout)
 - send_only(cmd: str)  (不等回包, 用在状态广播类场景)
@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from enum import Enum
+import math
 from typing import Callable, Deque, Optional
 
 from PySide6.QtCore import QEventLoop, QObject, QTimer, Signal
@@ -27,6 +29,17 @@ from .transport import RealSerialTransport, Transport
 
 
 RESYNCHRONIZATION_QUIET_MS = 200
+TRANSPARENT_ESCAPE = b"+++"
+UART_FRAME_BITS = 10
+
+
+class SerialSessionState(Enum):
+    """Current host-side interpretation of the UART1 communication mode."""
+
+    AT = "at"
+    ENTERING = "entering"
+    TRANSPARENT = "transparent"
+    EXITING = "exiting"
 
 
 class SerialError(Exception):
@@ -47,6 +60,7 @@ class _Pending:
     finished: bool = False
     has_been_sent: bool = False
     timeout_timer: Optional[QTimer] = None
+    transition: Optional[str] = None
 
 
 class SerialWorker(QObject):
@@ -74,7 +88,15 @@ class SerialWorker(QObject):
         self._port_name = ""
         self._baudrate = 0
         self._passthrough_raw = False
+        self._session_state = SerialSessionState.AT
         self._is_resynchronizing = False
+        self._transparent_exit_timeout_ms = 0
+        self._transparent_guard_timer = QTimer(self)
+        self._transparent_guard_timer.setObjectName("transparentGuardTimer")
+        self._transparent_guard_timer.setSingleShot(True)
+        self._transparent_guard_timer.timeout.connect(
+            self._write_transparent_escape
+        )
         self._resynchronization_timer = QTimer(self)
         self._resynchronization_timer.setObjectName(
             "serialResynchronizationTimer"
@@ -100,7 +122,12 @@ class SerialWorker(QObject):
     def is_resynchronizing(self) -> bool:
         return self._is_resynchronizing
 
-    def open(self, port_name: str, baudrate: int = 115200) -> bool:
+    @property
+    def session_state(self) -> SerialSessionState:
+        """Return the host's current UART1 session state."""
+        return self._session_state
+
+    def open(self, port_name: str, baudrate: int = 9600) -> bool:
         if self._is_open:
             self.close()
         if not self._transport.open(port_name, baudrate):
@@ -113,6 +140,8 @@ class SerialWorker(QObject):
         self._baudrate = baudrate
         self._splitter.reset()
         self._pending.clear()
+        self._session_state = SerialSessionState.AT
+        self._transparent_guard_timer.stop()
         self._resynchronization_timer.stop()
         self._is_resynchronizing = False
         self.connected.emit(port_name, baudrate)
@@ -120,14 +149,21 @@ class SerialWorker(QObject):
 
     def close(self) -> None:
         if self._is_open:
-            for pending in self._pending:
+            abandoned = list(self._pending)
+            self._pending.clear()
+            for pending in abandoned:
                 self._dispose_timeout_timer(pending)
             self._transport.close()
             self._is_open = False
-            self._pending.clear()
+            self._session_state = SerialSessionState.AT
+            self._transparent_guard_timer.stop()
             self._resynchronization_timer.stop()
             self._is_resynchronizing = False
             self._splitter.reset()
+            for pending in abandoned:
+                pending.finished = True
+                if pending.timeout_callback is not None:
+                    pending.timeout_callback()
             self.disconnected.emit()
 
     def send_only(self, cmd: str) -> None:
@@ -152,6 +188,88 @@ class SerialWorker(QObject):
             self._pending.remove(pending)
             raise
 
+    def enter_transparent(self, command: str, timeout_ms: int = 1000) -> None:
+        """Send one AT entry command and switch state only after its response."""
+        self._ensure_command_can_be_sent()
+        pending = _Pending(
+            command=command,
+            timeout_ms=timeout_ms,
+            transition="enter",
+        )
+        self._pending.append(pending)
+        try:
+            self._start_next_pending()
+        except SerialError:
+            self._pending.remove(pending)
+            raise
+
+    def send_transparent(self, data: bytes) -> None:
+        """Write exact payload bytes while an exclusive session is active."""
+        if self._session_state is not SerialSessionState.TRANSPARENT:
+            raise SerialError("transparent payload requires transparent mode")
+        if not data:
+            raise SerialError("transparent payload must not be empty")
+        if data == TRANSPARENT_ESCAPE:
+            raise SerialError("reserved escape sequence cannot be payload")
+        try:
+            self.send_bytes(data)
+        except SerialError:
+            # A partial raw write leaves the host unable to know how much the
+            # downstream device received. Force a reconnect instead of
+            # continuing with divergent session state.
+            self.close()
+            raise
+
+    def exit_transparent(
+        self,
+        *,
+        timeout_ms: int = 1000,
+        guard_ms: int = 10,
+    ) -> None:
+        """Write the guarded escape and wait for the firmware's final OK."""
+        if self._session_state is not SerialSessionState.TRANSPARENT:
+            raise SerialError("transparent exit requires transparent mode")
+        if self._pending:
+            raise SerialError("transparent exit requires an idle response queue")
+        if timeout_ms <= 0 or guard_ms < 1:
+            raise ValueError("transparent exit timing must be positive")
+        self._session_state = SerialSessionState.EXITING
+        self._transparent_exit_timeout_ms = timeout_ms
+        try:
+            drained = self._transport.wait_for_bytes_written(timeout_ms)
+        except Exception as error:
+            self.error_occurred.emit(f"等待透明传输写入完成失败: {error}")
+            self.close()
+            return
+        if not drained:
+            self.error_occurred.emit("透明传输写入排空超时，串口已关闭")
+            self.close()
+            return
+        # bytesToWrite()==0 means the final byte has reached the serial driver.
+        # Allow one full 8N1 frame to leave the UART, then begin the required
+        # quiet interval before transmitting the escape sequence.
+        final_frame_ms = math.ceil(UART_FRAME_BITS * 1000 / self._baudrate)
+        self._transparent_guard_timer.start(final_frame_ms + guard_ms)
+
+    def _write_transparent_escape(self) -> None:
+        if (
+            not self._is_open
+            or self._session_state is not SerialSessionState.EXITING
+        ):
+            return
+        pending = _Pending(
+            command=TRANSPARENT_ESCAPE.decode("ascii"),
+            timeout_ms=self._transparent_exit_timeout_ms,
+            transition="exit",
+        )
+        self._pending.append(pending)
+        try:
+            self._start_next_pending()
+        except SerialError:
+            self._pending.remove(pending)
+            self.error_occurred.emit("透明传输退出序列写入失败")
+            self.close()
+
     def set_passthrough_raw(self, enabled: bool) -> None:
         """Compatibility shim; the framed tunnel always keeps line parsing active."""
         self._passthrough_raw = False
@@ -159,6 +277,12 @@ class SerialWorker(QObject):
     def _on_async_timeout(self, pending: _Pending) -> None:
         if pending.finished or pending not in self._pending:
             return
+        if pending.transition == "exit":
+            self.error_occurred.emit("透明传输退出超时，串口已关闭")
+            self.close()
+            return
+        if pending.transition == "enter":
+            self._session_state = SerialSessionState.AT
         self._begin_resynchronization(pending.command)
 
     @staticmethod
@@ -233,8 +357,9 @@ class SerialWorker(QObject):
             self._handle_line(line, raw_line)
 
     def _on_port_error(self) -> None:
-        # transport 端已经过滤 NoError, 这里只管发错误消息
         self.error_occurred.emit(f"串口错误: {self._transport.error_string()}")
+        if self._session_state is not SerialSessionState.AT:
+            self.close()
 
     def _handle_line(self, line: str, raw_line: bytes | None = None) -> None:
         resp = ParsedResponse.parse(line)
@@ -272,6 +397,20 @@ class SerialWorker(QObject):
                 resp.version = data.version or resp.version
                 resp.diag = data.diag or resp.diag
             cur.finished = True
+            if cur.transition == "enter":
+                self._session_state = (
+                    SerialSessionState.TRANSPARENT
+                    if resp.ok
+                    else SerialSessionState.AT
+                )
+            elif cur.transition == "exit":
+                if not resp.ok:
+                    self.error_occurred.emit(
+                        "透明传输退出被固件拒绝，串口已关闭"
+                    )
+                    self.close()
+                    return
+                self._session_state = SerialSessionState.AT
             while self._pending and self._pending[0].finished:
                 self._pending.popleft()
             if cur.completion_callback is not None:
@@ -289,6 +428,8 @@ class SerialWorker(QObject):
     def _ensure_command_can_be_sent(self) -> None:
         if not self._is_open:
             raise SerialError("串口未打开")
+        if self._session_state is not SerialSessionState.AT:
+            raise SerialError("AT command requires AT mode")
         if self._is_resynchronizing:
             raise SerialError("串口协议正在重新同步")
 
@@ -299,7 +440,14 @@ class SerialWorker(QObject):
         if pending.finished or pending.has_been_sent:
             return
 
-        self.send_only(pending.command)
+        if pending.transition == "enter":
+            self._session_state = SerialSessionState.ENTERING
+        try:
+            self.send_only(pending.command)
+        except SerialError:
+            if pending.transition == "enter":
+                self._session_state = SerialSessionState.AT
+            raise
         pending.has_been_sent = True
         if pending.timeout_ms <= 0:
             return

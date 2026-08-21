@@ -15,20 +15,17 @@ from decimal import Decimal
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from .at_protocol import (
+    cmd_enter_transparent,
     cmd_power_off,
     cmd_handshake,
     cmd_query_fault,
     cmd_query_motor,
     cmd_query_sense,
-    iter_uart_tx_commands,
     cmd_set_charge,
     cmd_set_drive,
     cmd_set_led,
     cmd_set_motor,
     cmd_set_nmos,
-    cmd_set_uart2,
-    cmd_set_uart23,
-    cmd_set_uart3,
 )
 from .data_buffer import DataBuffer
 from .models import VersionInfo
@@ -118,8 +115,6 @@ class Controller(QObject):
         self._all_outputs_off_queued = False
         self._passthrough_transition_active = False
         self._queued_passthrough_mode: str | None = None
-        self._passthrough_tx_queue: deque[tuple[str, int]] = deque()
-        self._passthrough_tx_active: tuple[str, int] | None = None
 
         # 周期拉取定时器
         self._sense_timer = QTimer(self)
@@ -177,7 +172,7 @@ class Controller(QObject):
         self._apply_sense_interval()
         self.sense_request_hz_changed.emit(self._sense_hz)
 
-    def open(self, port: str, baud: int = 115200) -> bool:
+    def open(self, port: str, baud: int = 9600) -> bool:
         ok = self._worker.open(port, baud)
         return ok
 
@@ -406,38 +401,46 @@ class Controller(QObject):
         self._run_passthrough_transition(mode)
 
     def _run_passthrough_transition(self, mode: str) -> None:
-        previous = self._passthrough_mode
-        self._worker.set_passthrough_raw(False)
         self._stop_polling()
 
-        def revert(reason: str) -> None:
-            self._apply_passthrough_mode(previous)
-            self._on_worker_error(f"透传命令失败: {reason}")
-            self._finish_passthrough_transition()
-
-        def confirm() -> None:
-            self._apply_passthrough_mode(mode)
-            self._finish_passthrough_transition()
-
-        def enable_failed(reason: str) -> None:
+        def entry_failed(reason: str) -> None:
             self._apply_passthrough_mode("off")
             self._on_worker_error(f"透传命令失败: {reason}")
             self._finish_passthrough_transition()
 
-        if mode == "uart2":
-            after_off = confirm if previous == "both" else lambda: self._send_bridge(
-                cmd_set_uart2(True), confirm, enable_failed
+        def enter_target() -> None:
+            if mode == "off":
+                self._apply_passthrough_mode("off")
+                self._finish_passthrough_transition()
+                return
+            command = cmd_enter_transparent(mode)
+            self._send_bridge(
+                command,
+                lambda: self._confirm_passthrough_entry(mode),
+                entry_failed,
+                is_entry=True,
             )
-            self._send_bridge(cmd_set_uart3(False), after_off, revert)
-        elif mode == "uart3":
-            after_off = confirm if previous == "both" else lambda: self._send_bridge(
-                cmd_set_uart3(True), confirm, enable_failed
-            )
-            self._send_bridge(cmd_set_uart2(False), after_off, revert)
-        elif mode == "both":
-            self._send_bridge(cmd_set_uart23(True), confirm, revert)
-        elif mode == "off":
-            self._send_bridge(cmd_set_uart23(False), confirm, revert)
+
+        if self._passthrough_mode == "off":
+            enter_target()
+            return
+
+        def exit_confirmed() -> None:
+            self._apply_passthrough_mode("off")
+            enter_target()
+
+        self._send_bridge(
+            "+++",
+            exit_confirmed,
+            lambda reason: self._on_worker_error(
+                f"透传退出失败: {reason}"
+            ),
+            is_exit=True,
+        )
+
+    def _confirm_passthrough_entry(self, mode: str) -> None:
+        self._apply_passthrough_mode(mode)
+        self._finish_passthrough_transition()
 
     def _finish_passthrough_transition(self) -> None:
         next_mode = self._queued_passthrough_mode
@@ -456,17 +459,24 @@ class Controller(QObject):
         cmd: str,
         on_success: Callable[[], None],
         on_failure: Callable[[str], None],
+        *,
+        is_entry: bool = False,
+        is_exit: bool = False,
     ) -> None:
         self._pending_bridges[cmd].append((on_success, on_failure))
         try:
-            self._worker.send_command(cmd)
+            if is_entry:
+                self._worker.enter_transparent(cmd)
+            elif is_exit:
+                self._worker.exit_transparent()
+            else:
+                self._worker.send_command(cmd)
         except SerialError as error:
             self._pending_bridges[cmd].pop()
             on_failure(str(error))
 
     def _apply_passthrough_mode(self, mode: str) -> None:
         self._passthrough_mode = mode
-        self._worker.set_passthrough_raw(False)
         if (
             mode == "off"
             and not self._passthrough_transition_active
@@ -477,7 +487,7 @@ class Controller(QObject):
         self.passthrough_mode_changed.emit(mode)
 
     def send_passthrough_bytes(self, data: bytes) -> bool:
-        """Queue exact bytes as acknowledged, binary-safe AT tunnel frames."""
+        """Write exact bytes through the active exclusive transparent session."""
         if (
             not self._is_open
             or not self._handshake_ok
@@ -487,25 +497,13 @@ class Controller(QObject):
         ):
             return False
 
-        offset = 0
-        for command in iter_uart_tx_commands(data):
-            chunk_length = min(32, len(data) - offset)
-            self._passthrough_tx_queue.append((command, chunk_length))
-            offset += chunk_length
-        self._send_next_passthrough_chunk()
-        return True
-
-    def _send_next_passthrough_chunk(self) -> None:
-        if self._passthrough_tx_active is not None or not self._passthrough_tx_queue:
-            return
-        item = self._passthrough_tx_queue.popleft()
-        self._passthrough_tx_active = item
         try:
-            self._worker.send_command(item[0])
+            self._worker.send_transparent(data)
         except SerialError as error:
-            self._passthrough_tx_active = None
-            self._passthrough_tx_queue.clear()
             self._on_worker_error(f"透传发送失败: {error}")
+            return False
+        self.passthrough_tx_confirmed.emit(len(data))
+        return True
 
     def send_raw(self, cmd: str) -> None:
         """AT 输入框直接发, 不等回包."""
@@ -553,8 +551,6 @@ class Controller(QObject):
         self._passthrough_transition_active = False
         self._queued_passthrough_mode = None
         self._passthrough_mode = "off"
-        self._passthrough_tx_queue.clear()
-        self._passthrough_tx_active = None
         self._worker.set_passthrough_raw(False)
         if charge_was_active:
             self.charge_transition_changed.emit(False)
@@ -570,20 +566,6 @@ class Controller(QObject):
         pass
 
     def _on_response(self, cmd: str, resp) -> None:
-        if (
-            self._passthrough_tx_active is not None
-            and cmd == self._passthrough_tx_active[0]
-        ):
-            _, byte_count = self._passthrough_tx_active
-            self._passthrough_tx_active = None
-            if resp.error is not None:
-                self._passthrough_tx_queue.clear()
-                self._on_worker_error(f"透传发送失败: {resp.error.code}")
-            else:
-                self.passthrough_tx_confirmed.emit(byte_count)
-                self._send_next_passthrough_chunk()
-            return
-
         pending = self._pending_outputs.get(cmd)
         if pending:
             control, requested_state, on_success, on_failure = pending.popleft()

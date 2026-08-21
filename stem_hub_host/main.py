@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         _fw = FakeFirmware(worker)  # noqa: F841 — 需要保持引用, 否则 timer 会被 GC
         controller = Controller(worker)
         # 自动打开假串口
-        worker.open("FAKE0", 115200)
+        worker.open("FAKE0", 9600)
     else:
         worker = SerialWorker(transport=RealSerialTransport())
         controller = Controller(worker)

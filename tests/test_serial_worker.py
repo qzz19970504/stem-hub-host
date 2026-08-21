@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -162,6 +163,218 @@ def test_commands_are_written_one_at_a_time(qapp):
     transport.feed(b"OK\r\n")
     assert responses.at(0)[0] == "AT+SENSE?\r\n"
     assert transport.get_written() == b"AT+SENSE?\r\nAT+FAULT?\r\n"
+
+
+def test_exclusive_transparent_session_writes_exact_bytes(qapp):
+    from PySide6.QtTest import QTest
+
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    assert worker.session_state is serial_worker.SerialSessionState.ENTERING
+    assert transport.get_written() == b"AT+TRANS=2\r\n"
+    with pytest.raises(serial_worker.SerialError, match="AT mode"):
+        worker.send_command("AT+SENSE?\r\n")
+
+    transport.feed(b"OK\r\n")
+    assert worker.session_state is serial_worker.SerialSessionState.TRANSPARENT
+
+    payload = b"abc+++def\x00\xff\r\n"
+    worker.send_transparent(payload)
+    assert transport.get_written() == b"AT+TRANS=2\r\n" + payload
+
+    with pytest.raises(serial_worker.SerialError, match="reserved escape"):
+        worker.send_transparent(b"+++")
+
+    worker.exit_transparent(guard_ms=1, timeout_ms=100)
+    assert worker.session_state is serial_worker.SerialSessionState.EXITING
+    deadline = time.monotonic() + 0.2
+    while not transport.get_written().endswith(b"+++"):
+        assert time.monotonic() < deadline
+        QTest.qWait(1)
+    assert transport.get_written().endswith(b"+++")
+
+    transport.feed(b"OK\r\n")
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_transparent_exit_timeout_disconnects_and_resets_state(qapp):
+    from PySide6.QtTest import QTest
+
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=1\r\n", timeout_ms=100)
+    transport.feed(b"OK\r\n")
+
+    worker.exit_transparent(guard_ms=1, timeout_ms=20)
+    deadline = time.monotonic() + 0.5
+    while worker.is_open():
+        assert time.monotonic() < deadline
+        QTest.qWait(1)
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_exit_waits_for_transport_drain_before_guard(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+
+    drain_calls: list[int] = []
+    transport.wait_for_bytes_written = lambda timeout_ms: (
+        drain_calls.append(timeout_ms) or True
+    )
+    worker.send_transparent(bytes(range(32)))
+    worker.exit_transparent(guard_ms=10)
+
+    assert drain_calls == [1000]
+    assert worker._transparent_guard_timer.remainingTime() >= 11
+
+
+def test_exit_drain_timeout_closes_uncertain_session(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    errors: list[str] = []
+    worker.error_occurred.connect(errors.append)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+    transport.wait_for_bytes_written = lambda timeout_ms: False
+
+    worker.exit_transparent(guard_ms=10, timeout_ms=20)
+
+    assert not worker.is_open()
+    assert errors
+
+
+def test_incomplete_transparent_write_closes_uncertain_session(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+    transport.write = lambda payload: len(payload) - 1
+
+    with pytest.raises(serial_worker.SerialError, match="写入不完整"):
+        worker.send_transparent(b"payload")
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_queued_entry_stays_at_until_older_command_finishes(qapp):
+    from PySide6.QtTest import QTest
+
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.send_command("AT+SENSE?\r\n", timeout_ms=20)
+
+    worker.enter_transparent("AT+TRANS=2\r\n", timeout_ms=100)
+
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+    assert transport.get_written() == b"AT+SENSE?\r\n"
+    QTest.qWait(50)
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+    assert b"AT+TRANS=2" not in transport.get_written()
+
+
+def test_close_notifies_pending_sync_waiters(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    timeouts: list[bool] = []
+    pending = serial_worker._Pending(
+        command="AT+VERSION?\r\n",
+        timeout_callback=lambda: timeouts.append(True),
+    )
+    worker._pending.append(pending)
+
+    worker.close()
+
+    assert timeouts == [True]
+    assert pending.finished
+
+
+def test_rejected_transparent_entry_restores_at_state(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"ERROR:PARSE\r\n")
+
+    assert worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_transparent_port_error_closes_uncertain_session(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+
+    transport.error_occurred.emit(None)
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_rejected_transparent_exit_closes_uncertain_session(qapp):
+    from PySide6.QtTest import QTest
+
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+    worker.exit_transparent(guard_ms=1)
+    deadline = time.monotonic() + 0.2
+    while not transport.get_written().endswith(b"+++"):
+        assert time.monotonic() < deadline
+        QTest.qWait(1)
+
+    transport.feed(b"ERROR:STATE_BUSY\r\n")
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
 
 
 def test_sync_timeout_starts_when_queued_command_is_written(qapp):

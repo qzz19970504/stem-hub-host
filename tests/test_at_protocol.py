@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from stem_hub_host import at_protocol
 from stem_hub_host.at_protocol import (
     CRLF,
     LineSplitter,
@@ -16,16 +17,12 @@ from stem_hub_host.at_protocol import (
     cmd_query_motor,
     cmd_query_sense,
     cmd_raw,
-    iter_uart_tx_commands,
     cmd_power_off,
     cmd_set_charge,
     cmd_set_drive,
     cmd_set_led,
     cmd_set_motor,
     cmd_set_nmos,
-    cmd_set_uart2,
-    cmd_set_uart23,
-    cmd_set_uart3,
 )
 from stem_hub_host.models import (
     AtError,
@@ -100,10 +97,32 @@ class TestCommandBuilders:
         assert cmd_set_drive(False) == "AT+DRIVE=OFF\r\n"
         assert cmd_power_off() == "AT+POWER=OFF\r\n"
 
-    def test_set_uart(self):
-        assert cmd_set_uart2(True) == "AT+UART2=ON\r\n"
-        assert cmd_set_uart3(False) == "AT+UART3=OFF\r\n"
-        assert cmd_set_uart23(True) == "AT+UART2&3=ON\r\n"
+    @pytest.mark.parametrize(
+        ("mode", "expected"),
+        [
+            ("uart2", "AT+TRANS=1\r\n"),
+            ("uart3", "AT+TRANS=2\r\n"),
+            ("both", "AT+TRANS=1&2\r\n"),
+        ],
+    )
+    def test_enter_transparent(self, mode, expected):
+        assert at_protocol.cmd_enter_transparent(mode) == expected
+
+    def test_enter_transparent_rejects_invalid_mode(self):
+        with pytest.raises(ValueError, match="transparent mode"):
+            at_protocol.cmd_enter_transparent("off")
+
+    @pytest.mark.parametrize(
+        "legacy_name",
+        [
+            "cmd_set_uart2",
+            "cmd_set_uart3",
+            "cmd_set_uart23",
+            "iter_uart_tx_commands",
+        ],
+    )
+    def test_legacy_uart_command_builders_are_removed(self, legacy_name):
+        assert not hasattr(at_protocol, legacy_name)
 
     def test_cmd_raw_no_crlf(self):
         assert cmd_raw("AT+FOO=BAR") == "AT+FOO=BAR\r\n"
@@ -114,18 +133,6 @@ class TestCommandBuilders:
     def test_cmd_raw_preserves_intermediate(self):
         # 解析器不允许中间空格, 但 raw 不强制改, 留给固件报错
         assert cmd_raw("AT + FOO = BAR") == "AT + FOO = BAR\r\n"
-
-    def test_uart_tx_chunks_are_binary_exact(self):
-        payload = bytes(range(32)) + b"\x00\xff\r\n"
-        assert list(iter_uart_tx_commands(payload)) == [
-            f"AT+UARTTX={bytes(range(32)).hex().upper()}\r\n",
-            "AT+UARTTX=00FF0D0A\r\n",
-        ]
-
-    def test_uart_tx_rejects_empty_payload(self):
-        with pytest.raises(ValueError):
-            list(iter_uart_tx_commands(b""))
-
 
 # ---- 响应解析 ----
 class TestParsedResponse:

@@ -258,4 +258,4 @@ class SerialBar(QWidget):
         port = self.port_combo.currentData()
         if not port:
             return
-        self.open_requested.emit(port, 115200)
+        self.open_requested.emit(port, 9600)
