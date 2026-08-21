@@ -8,7 +8,7 @@
 启动:
     from stem_hub_host.fake_firmware import FakeFirmware
     fw = FakeFirmware(worker)
-    worker.open("FAKE0", 115200)  # 任何名字都行
+    worker.open("FAKE0", 9600)  # 任何名字都行
     # 之后可以 send_and_wait
 """
 from __future__ import annotations
