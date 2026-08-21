@@ -222,6 +222,22 @@ def test_transparent_exit_timeout_disconnects_and_resets_state(qapp):
     assert worker.session_state is serial_worker.SerialSessionState.AT
 
 
+def test_exit_guard_waits_for_raw_payload_serialization(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+
+    worker.send_transparent(bytes(range(32)))
+    worker.exit_transparent(guard_ms=10)
+
+    assert worker._transparent_guard_timer.remainingTime() >= 40
+
+
 def test_rejected_transparent_entry_restores_at_state(qapp):
     from stem_hub_host import serial_worker
     from stem_hub_host.transport import FakeSerialTransport

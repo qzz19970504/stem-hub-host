@@ -18,6 +18,8 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
+import math
+import time
 from typing import Callable, Deque, Optional
 
 from PySide6.QtCore import QEventLoop, QObject, QTimer, Signal
@@ -29,6 +31,7 @@ from .transport import RealSerialTransport, Transport
 
 RESYNCHRONIZATION_QUIET_MS = 200
 TRANSPARENT_ESCAPE = b"+++"
+UART_FRAME_BITS = 10
 
 
 class SerialSessionState(Enum):
@@ -89,6 +92,7 @@ class SerialWorker(QObject):
         self._session_state = SerialSessionState.AT
         self._is_resynchronizing = False
         self._transparent_exit_timeout_ms = 0
+        self._transparent_tx_busy_until = 0.0
         self._transparent_guard_timer = QTimer(self)
         self._transparent_guard_timer.setObjectName("transparentGuardTimer")
         self._transparent_guard_timer.setSingleShot(True)
@@ -139,6 +143,7 @@ class SerialWorker(QObject):
         self._splitter.reset()
         self._pending.clear()
         self._session_state = SerialSessionState.AT
+        self._transparent_tx_busy_until = 0.0
         self._transparent_guard_timer.stop()
         self._resynchronization_timer.stop()
         self._is_resynchronizing = False
@@ -153,6 +158,7 @@ class SerialWorker(QObject):
             self._is_open = False
             self._pending.clear()
             self._session_state = SerialSessionState.AT
+            self._transparent_tx_busy_until = 0.0
             self._transparent_guard_timer.stop()
             self._resynchronization_timer.stop()
             self._is_resynchronizing = False
@@ -207,6 +213,14 @@ class SerialWorker(QObject):
         if data == TRANSPARENT_ESCAPE:
             raise SerialError("reserved escape sequence cannot be payload")
         self.send_bytes(data)
+        now = time.monotonic()
+        serialization_seconds = (
+            len(data) * UART_FRAME_BITS / self._baudrate
+        )
+        self._transparent_tx_busy_until = (
+            max(now, self._transparent_tx_busy_until)
+            + serialization_seconds
+        )
 
     def exit_transparent(
         self,
@@ -223,7 +237,11 @@ class SerialWorker(QObject):
             raise ValueError("transparent exit timing must be positive")
         self._session_state = SerialSessionState.EXITING
         self._transparent_exit_timeout_ms = timeout_ms
-        self._transparent_guard_timer.start(guard_ms)
+        remaining_tx_ms = math.ceil(
+            max(0.0, self._transparent_tx_busy_until - time.monotonic())
+            * 1000
+        )
+        self._transparent_guard_timer.start(remaining_tx_ms + guard_ms)
 
     def _write_transparent_escape(self) -> None:
         if (
