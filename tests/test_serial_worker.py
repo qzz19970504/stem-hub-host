@@ -238,6 +238,64 @@ def test_exit_guard_waits_for_raw_payload_serialization(qapp):
     assert worker._transparent_guard_timer.remainingTime() >= 40
 
 
+def test_incomplete_transparent_write_closes_uncertain_session(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    transport.feed(b"OK\r\n")
+    transport.write = lambda payload: len(payload) - 1
+
+    with pytest.raises(serial_worker.SerialError, match="写入不完整"):
+        worker.send_transparent(b"payload")
+
+    assert not worker.is_open()
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+
+
+def test_queued_entry_stays_at_until_older_command_finishes(qapp):
+    from PySide6.QtTest import QTest
+
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    worker.send_command("AT+SENSE?\r\n", timeout_ms=20)
+
+    worker.enter_transparent("AT+TRANS=2\r\n", timeout_ms=100)
+
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+    assert transport.get_written() == b"AT+SENSE?\r\n"
+    QTest.qWait(50)
+    assert worker.session_state is serial_worker.SerialSessionState.AT
+    assert b"AT+TRANS=2" not in transport.get_written()
+
+
+def test_close_notifies_pending_sync_waiters(qapp):
+    from stem_hub_host import serial_worker
+    from stem_hub_host.transport import FakeSerialTransport
+
+    transport = FakeSerialTransport()
+    worker = serial_worker.SerialWorker(transport)
+    assert worker.open("FAKE0", 9600)
+    timeouts: list[bool] = []
+    pending = serial_worker._Pending(
+        command="AT+VERSION?\r\n",
+        timeout_callback=lambda: timeouts.append(True),
+    )
+    worker._pending.append(pending)
+
+    worker.close()
+
+    assert timeouts == [True]
+    assert pending.finished
+
+
 def test_rejected_transparent_entry_restores_at_state(qapp):
     from stem_hub_host import serial_worker
     from stem_hub_host.transport import FakeSerialTransport

@@ -251,6 +251,29 @@ def test_fake_firmware_guarded_exit_restores_at_mode() -> None:
     firmware.deleteLater()
 
 
+def test_fake_firmware_forwards_split_plus_payload_without_exiting() -> None:
+    _app()
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    firmware = FakeFirmware(worker)
+    received = QSignalSpy(worker.uart_rx_received)
+    assert worker.open("FAKE0", 9600)
+    worker.enter_transparent("AT+TRANS=2\r\n")
+    _wait_until(lambda: worker.session_state.value == "transparent")
+
+    worker.send_transparent(b"++")
+    worker.send_transparent(b"+")
+    _wait_until(lambda: received.count() > 0)
+
+    payload = b"".join(bytes(received.at(i)[1]) for i in range(received.count()))
+    assert payload == b"+++"
+    assert worker.session_state.value == "transparent"
+    assert firmware._transparent_target == "2"
+    worker.exit_transparent(guard_ms=1)
+    _wait_until(lambda: worker.session_state.value == "at")
+    firmware.deleteLater()
+
+
 def test_plot_reset_removes_existing_curve_data() -> None:
     _app()
     buffer = DataBuffer()

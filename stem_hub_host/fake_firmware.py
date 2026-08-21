@@ -23,7 +23,7 @@ from .at_protocol import (
     CRLF,
     LineSplitter,
 )
-from .serial_worker import SerialWorker
+from .serial_worker import SerialSessionState, SerialWorker
 from .transport import FakeSerialTransport
 
 
@@ -97,7 +97,10 @@ class FakeFirmware(QObject):
         transport = self._worker._transport  # type: ignore[attr-defined]
         if not isinstance(transport, FakeSerialTransport):
             return
-        if payload == b"+++":
+        if (
+            payload == b"+++"
+            and self._worker.session_state is SerialSessionState.EXITING
+        ):
             self._transparent_target = None
             self._uart2 = False
             self._uart3 = False

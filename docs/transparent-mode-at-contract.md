@@ -62,8 +62,8 @@ UART2/UART3 的反向数据仍由固件封装为：
 
 ```powershell
 & 'env\release\Scripts\python.exe' tools\real_serial_smoke.py `
-  --port COM12 --downstream-port COM10 --duration-seconds 5
+  --port COM12 --downstream-port COM10 --target uart2 --duration-seconds 5
 ```
 
-脚本要求完成 v3.2 握手与普通遥测，然后验证 UART3 双向二进制数据、嵌入式
+脚本要求完成 v3.2 握手与普通遥测，然后验证指定目标的双向二进制数据、嵌入式
 `+++`、受保护退出以及退出后的 `AT+SENSE?`。端口号必须以当前设备枚举为准。

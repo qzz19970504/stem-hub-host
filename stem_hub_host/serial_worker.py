@@ -152,17 +152,22 @@ class SerialWorker(QObject):
 
     def close(self) -> None:
         if self._is_open:
-            for pending in self._pending:
+            abandoned = list(self._pending)
+            self._pending.clear()
+            for pending in abandoned:
                 self._dispose_timeout_timer(pending)
             self._transport.close()
             self._is_open = False
-            self._pending.clear()
             self._session_state = SerialSessionState.AT
             self._transparent_tx_busy_until = 0.0
             self._transparent_guard_timer.stop()
             self._resynchronization_timer.stop()
             self._is_resynchronizing = False
             self._splitter.reset()
+            for pending in abandoned:
+                pending.finished = True
+                if pending.timeout_callback is not None:
+                    pending.timeout_callback()
             self.disconnected.emit()
 
     def send_only(self, cmd: str) -> None:
@@ -195,13 +200,11 @@ class SerialWorker(QObject):
             timeout_ms=timeout_ms,
             transition="enter",
         )
-        self._session_state = SerialSessionState.ENTERING
         self._pending.append(pending)
         try:
             self._start_next_pending()
         except SerialError:
             self._pending.remove(pending)
-            self._session_state = SerialSessionState.AT
             raise
 
     def send_transparent(self, data: bytes) -> None:
@@ -212,7 +215,14 @@ class SerialWorker(QObject):
             raise SerialError("transparent payload must not be empty")
         if data == TRANSPARENT_ESCAPE:
             raise SerialError("reserved escape sequence cannot be payload")
-        self.send_bytes(data)
+        try:
+            self.send_bytes(data)
+        except SerialError:
+            # A partial raw write leaves the host unable to know how much the
+            # downstream device received. Force a reconnect instead of
+            # continuing with divergent session state.
+            self.close()
+            raise
         now = time.monotonic()
         serialization_seconds = (
             len(data) * UART_FRAME_BITS / self._baudrate
@@ -432,7 +442,14 @@ class SerialWorker(QObject):
         if pending.finished or pending.has_been_sent:
             return
 
-        self.send_only(pending.command)
+        if pending.transition == "enter":
+            self._session_state = SerialSessionState.ENTERING
+        try:
+            self.send_only(pending.command)
+        except SerialError:
+            if pending.transition == "enter":
+                self._session_state = SerialSessionState.AT
+            raise
         pending.has_been_sent = True
         if pending.timeout_ms <= 0:
             return

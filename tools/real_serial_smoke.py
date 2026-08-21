@@ -23,8 +23,12 @@ from stem_hub_host.ui.main_window import MainWindow
 
 DEFAULT_BAUD = 9600
 DEFAULT_DURATION_SECONDS = 90.0
-UART3_FORWARD_PROBE = b"HOST-UART3\x00\xffabc+++def"
-UART3_REVERSE_PROBE = b"MCU-UART3\x00\xff"
+TRANSPARENT_FORWARD_PROBE = b"HOST-TRANS\x00\xffabc+++def"
+TRANSPARENT_REVERSE_PROBE = b"MCU-TRANS\x00\xff"
+TRANSPARENT_TARGET_UART_INDEX = {
+    "uart2": 2,
+    "uart3": 3,
+}
 HARDWARE_STEP_TIMEOUT_SECONDS = 3.0
 
 
@@ -52,11 +56,12 @@ def _open_downstream_port(port_name: str) -> QSerialPort:
     return port
 
 
-def _verify_uart3_passthrough(
+def _verify_transparent_passthrough(
     app: QApplication,
     worker: SerialWorker,
     controller: Controller,
     downstream_port_name: str,
+    target: str,
 ) -> dict[str, object]:
     downstream = _open_downstream_port(downstream_port_name)
     forward_received = bytearray()
@@ -66,47 +71,54 @@ def _verify_uart3_passthrough(
         lambda: forward_received.extend(bytes(downstream.readAll()))
     )
 
+    target_uart_index = TRANSPARENT_TARGET_UART_INDEX[target]
+
     def collect_reverse(uart_index: int, payload: bytes) -> None:
-        if uart_index == 3:
+        if uart_index == target_uart_index:
             reverse_received.extend(payload)
 
     worker.uart_rx_received.connect(collect_reverse)
     try:
         downstream.clear()
-        controller.set_passthrough("uart3")
+        controller.set_passthrough(target)
         _wait_until(
             app,
-            lambda: controller.passthrough_mode == "uart3",
-            "UART3 transparent entry",
+            lambda: controller.passthrough_mode == target,
+            f"{target.upper()} transparent entry",
         )
 
-        if not controller.send_passthrough_bytes(UART3_FORWARD_PROBE):
-            raise RuntimeError("host rejected UART3 forward probe")
+        if not controller.send_passthrough_bytes(TRANSPARENT_FORWARD_PROBE):
+            raise RuntimeError(f"host rejected {target.upper()} forward probe")
         _wait_until(
             app,
-            lambda: len(forward_received) >= len(UART3_FORWARD_PROBE),
-            "UART3 forward bytes",
+            lambda: len(forward_received) >= len(TRANSPARENT_FORWARD_PROBE),
+            f"{target.upper()} forward bytes",
         )
-        if bytes(forward_received) != UART3_FORWARD_PROBE:
+        if bytes(forward_received) != TRANSPARENT_FORWARD_PROBE:
             raise RuntimeError(
-                "UART3 forward mismatch: "
+                f"{target.upper()} forward mismatch: "
                 f"{bytes(forward_received).hex(' ').upper()}"
             )
 
-        if downstream.write(UART3_REVERSE_PROBE) != len(UART3_REVERSE_PROBE):
-            raise RuntimeError("downstream UART3 write was incomplete")
+        if downstream.write(TRANSPARENT_REVERSE_PROBE) != len(
+            TRANSPARENT_REVERSE_PROBE
+        ):
+            raise RuntimeError(
+                f"downstream {target.upper()} write was incomplete"
+            )
         if not downstream.waitForBytesWritten(1000):
             raise RuntimeError(
-                f"downstream UART3 write failed: {downstream.errorString()}"
+                f"downstream {target.upper()} write failed: "
+                f"{downstream.errorString()}"
             )
         _wait_until(
             app,
-            lambda: len(reverse_received) >= len(UART3_REVERSE_PROBE),
-            "UART3 reverse event",
+            lambda: len(reverse_received) >= len(TRANSPARENT_REVERSE_PROBE),
+            f"{target.upper()} reverse event",
         )
-        if bytes(reverse_received) != UART3_REVERSE_PROBE:
+        if bytes(reverse_received) != TRANSPARENT_REVERSE_PROBE:
             raise RuntimeError(
-                "UART3 reverse mismatch: "
+                f"{target.upper()} reverse mismatch: "
                 f"{bytes(reverse_received).hex(' ').upper()}"
             )
 
@@ -123,8 +135,8 @@ def _verify_uart3_passthrough(
         if sense.sense is None:
             raise RuntimeError("AT+SENSE? did not recover after transparent exit")
         return {
-            "uart3_forward": bytes(forward_received).hex().upper(),
-            "uart3_reverse": bytes(reverse_received).hex().upper(),
+            f"{target}_forward": bytes(forward_received).hex().upper(),
+            f"{target}_reverse": bytes(reverse_received).hex().upper(),
             "guarded_exit": True,
             "sense_after_exit": True,
         }
@@ -146,6 +158,7 @@ def run(
     port_name: str,
     duration_seconds: float,
     downstream_port_name: str | None = None,
+    target: str = "uart3",
 ) -> None:
     """Exercise handshake, polling, parser, controller, and UI bindings."""
     app = QApplication.instance() or QApplication([])
@@ -168,11 +181,12 @@ def run(
 
     uart3_result: dict[str, object] = {}
     if controller.is_handshake_ok and downstream_port_name is not None:
-        uart3_result = _verify_uart3_passthrough(
+        uart3_result = _verify_transparent_passthrough(
             app,
             worker,
             controller,
             downstream_port_name,
+            target,
         )
 
     latest = controller.get_latest()
@@ -206,7 +220,9 @@ def run(
     if result["handshake_failures"]:
         failed_checks.append("handshake_failures")
     expected_passthrough_rx = (
-        len(UART3_REVERSE_PROBE) if downstream_port_name is not None else 0
+        len(TRANSPARENT_REVERSE_PROBE)
+        if downstream_port_name is not None
+        else 0
     )
     if result["passthrough_rx_bytes"] != expected_passthrough_rx:
         failed_checks.append("passthrough_rx_bytes")
@@ -224,7 +240,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", default="COM12")
     parser.add_argument(
         "--downstream-port",
-        help="optional UART3 adapter used for bidirectional transparent smoke",
+        help="optional downstream adapter for bidirectional transparent smoke",
+    )
+    parser.add_argument(
+        "--target",
+        choices=tuple(TRANSPARENT_TARGET_UART_INDEX),
+        default="uart3",
+        help="transparent target wired to --downstream-port",
     )
     parser.add_argument(
         "--duration-seconds",
@@ -238,7 +260,12 @@ def main() -> int:
     """Run the connected smoke test with a process-compatible result."""
     options = parse_args()
     try:
-        run(options.port, options.duration_seconds, options.downstream_port)
+        run(
+            options.port,
+            options.duration_seconds,
+            options.downstream_port,
+            options.target,
+        )
     except RuntimeError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
