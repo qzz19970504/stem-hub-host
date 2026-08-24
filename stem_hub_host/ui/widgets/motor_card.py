@@ -544,13 +544,13 @@ class MotorCard(QFrame):
             theme.LAYOUT_MARGIN_CARD,
             theme.LAYOUT_MARGIN_CARD_Y,
         )
-        outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
+        outer.setSpacing(0)
 
         self.upper_region = QWidget(self)
         self.upper_region.setStyleSheet(
             f"background-color: {theme.BG_CARD};"
         )
-        self.upper_region.setFixedHeight(theme.CARD_UPPER_REGION_HEIGHT)
+        self.upper_region.setFixedHeight(theme.MOTOR_UPPER_REGION_HEIGHT)
         upper_layout = QVBoxLayout(self.upper_region)
         upper_layout.setContentsMargins(
             0,
@@ -559,7 +559,6 @@ class MotorCard(QFrame):
             theme.CARD_UPPER_MIN_GAP,
         )
         upper_layout.setSpacing(0)
-        upper_layout.addStretch(1)
 
         self.upper_content = QWidget(self.upper_region)
         self.upper_content.setSizePolicy(
@@ -579,13 +578,13 @@ class MotorCard(QFrame):
         content_layout.addWidget(self.current_badge)
 
         upper_layout.addWidget(self.upper_content)
-        upper_layout.addStretch(1)
         outer.addWidget(self.upper_region)
 
         self.divider = QFrame(self)
         self.divider.setObjectName("divider")
         self.divider.setFixedHeight(theme.DIVIDER_HEIGHT)
         outer.addWidget(self.divider)
+        outer.addSpacing(theme.LAYOUT_GAP_CONTROL)
 
         row = QHBoxLayout()
         row.setSpacing(theme.LAYOUT_GAP_CONTROL)
