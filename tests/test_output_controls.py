@@ -15,6 +15,7 @@ from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
 from stem_hub_host.ui.main_window import MainWindow
 from stem_hub_host.ui.widgets.charge_mode_card import ChargeModeCard
+from stem_hub_host.ui.widgets.motor_card import MotorCard
 
 
 @pytest.fixture(scope="module")
@@ -76,6 +77,68 @@ def test_charge_bypass_is_vertically_aligned_with_lights(
 
     assert abs(bypass_x - lights_x) <= 2
     assert output_card.drive_hierarchy.objectName() == "driveHierarchy"
+
+
+def test_output_controls_follow_approved_hierarchy(
+    output_card: ChargeModeCard,
+    qapp: QApplication,
+) -> None:
+    output_card.setFixedSize(367, 312)
+    output_card.show()
+    qapp.processEvents()
+
+    centers = {
+        name: cell.toggle.mapTo(output_card, cell.toggle.rect().center())
+        for name, cell in output_card._cells.items()
+    }
+
+    assert abs(centers["CHARGE"].y() - centers["CHARGE_BYPASS"].y()) <= 2
+    assert centers["CHARGE"].y() < centers["DRIVE"].y()
+    assert centers["DRIVE"].y() < centers["NMOS1"].y()
+    assert abs(centers["NMOS1"].y() - centers["NMOS2"].y()) <= 2
+    assert abs(centers["NMOS2"].y() - centers["LIGHTS"].y()) <= 2
+    assert abs(centers["DRIVE"].x() - centers["NMOS2"].x()) <= 2
+    assert output_card._cells["CHARGE_BYPASS"].label.text() == "CHARGE BYPASS"
+
+
+def test_output_switches_and_labels_are_fully_contained(
+    output_card: ChargeModeCard,
+    qapp: QApplication,
+) -> None:
+    output_card.setFixedSize(367, 312)
+    output_card.show()
+    qapp.processEvents()
+
+    for cell in output_card._cells.values():
+        for widget in (cell.toggle, cell.label):
+            top_left = widget.mapTo(output_card, widget.rect().topLeft())
+            bottom_right = widget.mapTo(output_card, widget.rect().bottomRight())
+            assert top_left.x() >= 0
+            assert top_left.y() >= 0
+            assert bottom_right.x() < output_card.width()
+            assert bottom_right.y() < output_card.divider.y()
+            assert widget.sizeHint().width() <= widget.width()
+
+
+def test_motor_status_bands_use_equal_vertical_spacing(
+    qapp: QApplication,
+) -> None:
+    card = MotorCard()
+    card.setFixedSize(640, 430)
+    card.show()
+    qapp.processEvents()
+
+    mode_bottom = card.mode_badge.mapTo(card, card.mode_badge.rect().bottomLeft()).y()
+    current_top = card.current_badge.mapTo(card, card.current_badge.rect().topLeft()).y()
+    current_bottom = card.current_badge.mapTo(
+        card, card.current_badge.rect().bottomLeft()
+    ).y()
+    divider_top = card.divider.mapTo(card, card.divider.rect().topLeft()).y()
+
+    assert abs((current_top - mode_bottom) - (divider_top - current_bottom)) <= 2
+
+    card.close()
+    card.deleteLater()
 
 
 def test_output_parent_child_gates_are_independent(
