@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import theme
+from .toggle_switch import ToggleSwitch
 
 
 # ---- 按钮配色 ----
@@ -65,31 +66,32 @@ def _button_config(key: str) -> dict[str, str]:
 
 # ---- 自绘图标 ----
 
-def _draw_moon(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+def _draw_power_standby(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
     p.save()
     pen = QPen(QColor(color), max(2, r * 0.18), Qt.PenStyle.SolidLine,
                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    # 弯月: 外圆 + 内偏移圆
-    p.drawArc(QRectF(cx - r, cy - r, r * 2, r * 2), 30 * 16, -180 * 16)
-    p.drawArc(QRectF(cx - r * 0.2, cy - r, r * 1.2, r * 2), 0, -180 * 16)
+    p.drawArc(QRectF(cx - r, cy - r * 0.72, r * 2, r * 2), 35 * 16, 290 * 16)
+    p.drawLine(QPointF(cx, cy - r), QPointF(cx, cy + r * 0.05))
     p.restore()
 
 
-def _draw_sun(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+def _draw_power_active(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
     p.save()
     pen = QPen(QColor(color), max(2, r * 0.16), Qt.PenStyle.SolidLine,
                Qt.PenCapStyle.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawEllipse(QPointF(cx, cy), r * 0.45, r * 0.45)
-    for i in range(8):
-        ang = i * math.pi / 4
-        x1 = cx + math.cos(ang) * r * 0.65
-        y1 = cy + math.sin(ang) * r * 0.65
-        x2 = cx + math.cos(ang) * r * 1.0
-        y2 = cy + math.sin(ang) * r * 1.0
+    p.drawArc(QRectF(cx - r * 0.66, cy - r * 0.48, r * 1.32, r * 1.32),
+              35 * 16, 290 * 16)
+    p.drawLine(QPointF(cx, cy - r * 0.72), QPointF(cx, cy + r * 0.02))
+    for i in range(6):
+        ang = math.pi + i * math.pi / 5
+        x1 = cx + math.cos(ang) * r * 0.88
+        y1 = cy + math.sin(ang) * r * 0.88
+        x2 = cx + math.cos(ang) * r * 1.08
+        y2 = cy + math.sin(ang) * r * 1.08
         p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
     p.restore()
 
@@ -130,28 +132,26 @@ def _draw_arrow_down(p: QPainter, cx: float, cy: float, r: float, color: str) ->
     p.restore()
 
 
-def _draw_lightning(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+def _draw_brake_disc(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
     p.save()
-    path = QPainterPath()
-    path.moveTo(cx + r * 0.15, cy - r * 0.8)
-    path.lineTo(cx - r * 0.45, cy + r * 0.05)
-    path.lineTo(cx - r * 0.05, cy + r * 0.05)
-    path.lineTo(cx - r * 0.35, cy + r * 0.8)
-    path.lineTo(cx + r * 0.5, cy - r * 0.10)
-    path.lineTo(cx + r * 0.10, cy - r * 0.10)
-    path.closeSubpath()
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(color))
-    p.drawPath(path)
+    pen = QPen(QColor(color), max(2, r * 0.15), Qt.PenStyle.SolidLine,
+               Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QPointF(cx - r * 0.12, cy), r * 0.68, r * 0.68)
+    p.drawEllipse(QPointF(cx - r * 0.12, cy), r * 0.13, r * 0.13)
+    p.drawArc(QRectF(cx + r * 0.15, cy - r * 0.82, r * 0.78, r * 1.64),
+              75 * 16, -150 * 16)
     p.restore()
 
 
 def _draw_stop_square(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
     p.save()
     s = r * 1.25
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(color))
-    p.drawRect(QRectF(cx - s / 2, cy - s / 2, s, s))
+    p.setPen(QPen(QColor(color), max(2, r * 0.16), Qt.PenStyle.SolidLine,
+                  Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(cx - s / 2, cy - s / 2, s, s), r * 0.14, r * 0.14)
     p.restore()
 
 
@@ -247,17 +247,17 @@ class _ModeBadge(QFrame):
         self.set_value(self._mode)
 
 
-class _CurrentBadge(QWidget):
-    """Read-only motor current display."""
+class _CurrentBadge(QFrame):
+    """Rounded current and motor-bypass status surface."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._ma: int | None = None
-        self.setFixedHeight(60)
+        self.setFixedHeight(72)
+        self._apply_surface()
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(28, 4, 24, 4)
-        lay.setSpacing(16)
-        lay.addStretch(1)
+        lay.setContentsMargins(24, 4, 20, 4)
+        lay.setSpacing(10)
 
         self._label = QLabel("CURRENT:")
         f_lbl = QFont(theme.FONT_DISPLAY)
@@ -281,6 +281,31 @@ class _CurrentBadge(QWidget):
 
         lay.addStretch(1)
 
+        bypass_column = QVBoxLayout()
+        bypass_column.setSpacing(2)
+        self.bypass_toggle = ToggleSwitch(self)
+        bypass_column.addWidget(
+            self.bypass_toggle, 0, Qt.AlignmentFlag.AlignHCenter
+        )
+        self.bypass_label = QLabel("MOTOR BYPASS")
+        bypass_font = QFont(theme.FONT_MONO)
+        bypass_font.setPointSize(9)
+        bypass_font.setBold(True)
+        self.bypass_label.setFont(bypass_font)
+        self.bypass_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bypass_column.addWidget(self.bypass_label)
+        lay.addLayout(bypass_column)
+
+    def _apply_surface(self) -> None:
+        self.setStyleSheet(
+            "QFrame {"
+            f" background: {theme.BG_ELEVATED};"
+            f" border: 1.5px solid {theme.BORDER};"
+            " border-radius: 14px;"
+            "}"
+            "QLabel { background: transparent; border: none; }"
+        )
+
     def set_current_ma(self, ma: int | None) -> None:
         self._ma = ma
         if ma is None:
@@ -297,9 +322,12 @@ class _CurrentBadge(QWidget):
         )
 
     def refresh_theme(self) -> None:
+        self._apply_surface()
         self._label.setStyleSheet(
             f"color: {theme.FG_SECONDARY}; background: transparent;"
         )
+        color = theme.FG_PRIMARY if self.bypass_toggle.isEnabled() else theme.FG_DISABLED
+        self.bypass_label.setStyleSheet(f"color: {color}; background: transparent;")
         self.set_current_ma(self._ma)
 
 
@@ -356,15 +384,15 @@ class _ModeButton(QPushButton):
 
     def _draw_icon(self, p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
         if self._key == "SLEEP":
-            _draw_moon(p, cx, cy, r, color)
+            _draw_power_standby(p, cx, cy, r, color)
         elif self._key == "WAKE":
-            _draw_sun(p, cx, cy, r, color)
+            _draw_power_active(p, cx, cy, r, color)
         elif self._key == "FWD":
             _draw_arrow_up(p, cx, cy, r, color)
         elif self._key == "REV":
             _draw_arrow_down(p, cx, cy, r, color)
         elif self._key == "BRAKE":
-            _draw_lightning(p, cx, cy, r, color)
+            _draw_brake_disc(p, cx, cy, r, color)
         elif self._key == "STOP":
             _draw_stop_square(p, cx, cy, r, color)
 
@@ -498,6 +526,7 @@ class MotorCard(QFrame):
     rev_clicked = Signal()
     brake_clicked = Signal()
     stop_clicked = Signal()
+    bypass_changed = Signal(bool)
     button_pairs = (
         ("SLEEP", "WAKE"),
         ("FWD", "REV"),
@@ -545,6 +574,8 @@ class MotorCard(QFrame):
         content_layout.addWidget(self.mode_badge)
 
         self.current_badge = _CurrentBadge(self)
+        self.bypass_toggle = self.current_badge.bypass_toggle
+        self.bypass_toggle.toggled.connect(self.bypass_changed)
         content_layout.addWidget(self.current_badge)
 
         upper_layout.addWidget(self.upper_content)
@@ -625,6 +656,18 @@ class MotorCard(QFrame):
     def set_enabled(self, enabled: bool) -> None:
         for b in self._btns.values():
             b.setEnabled(enabled)
+        if not enabled:
+            self.set_bypass_enabled(False)
+
+    def set_bypass_enabled(self, enabled: bool) -> None:
+        self.bypass_toggle.setEnabled(enabled)
+        color = theme.FG_PRIMARY if enabled else theme.FG_DISABLED
+        self.current_badge.bypass_label.setStyleSheet(
+            f"color: {color}; background: transparent;"
+        )
+
+    def set_bypass_state(self, on: bool) -> None:
+        self.bypass_toggle.set_on(on, animate=False)
 
     def update_state(
         self, mode: str | None, current_ma: int | None,

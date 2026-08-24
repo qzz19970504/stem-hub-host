@@ -30,7 +30,7 @@ from .transport import FakeSerialTransport
 class FakeFirmware(QObject):
     """模拟固件行为."""
 
-    VERSION = "release-v3.2"
+    VERSION = "release-v3.3"
 
     def __init__(self, worker: SerialWorker, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -43,9 +43,13 @@ class FakeFirmware(QObject):
         self._overcurrent = 0
         self._drv_fault = 0
         self._aux_fault = 0
-        self._led_on = True
+        self._led_on = False
         self._nmos1 = False
         self._nmos2 = False
+        self._motor_bypass = False
+        self._charge_bypass = False
+        self._power_mode = "OFF"
+        self._charge_phase = "IDLE"
         self._mp4317 = False
         self._lm51770 = False
         self._uart2 = False
@@ -72,8 +76,21 @@ class FakeFirmware(QObject):
         self._mp4317 = False
         if mode == "charge":
             self._lm51770 = True
+            self._power_mode = "CHARGE"
+            self._charge_phase = "ON"
         elif mode == "drive":
             self._mp4317 = True
+            self._power_mode = "DRIVE"
+            self._charge_phase = "IDLE"
+        else:
+            self._power_mode = "OFF"
+            self._charge_phase = "IDLE"
+        if mode != "charge":
+            self._charge_bypass = False
+        if mode != "drive":
+            self._nmos1 = False
+            self._nmos2 = False
+            self._led_on = False
 
     def _poll(self) -> None:
         """定时检查 worker transport 写出的字节."""
@@ -124,6 +141,18 @@ class FakeFirmware(QObject):
                 f"+MOTOR:MODE={self._motor_mode},CURRENT_MA={self._motor_current_ma},"
                 f"OVERCURRENT={self._overcurrent},FAULT={self._drv_fault}{CRLF}OK{CRLF}".encode()
             )
+        elif cmd == "AT+OUTPUT?":
+            transport.feed(
+                (
+                    f"+OUTPUT:POWER={self._power_mode},"
+                    f"CHARGE_PHASE={self._charge_phase},"
+                    f"NMOS1={int(self._nmos1)},NMOS2={int(self._nmos2)},"
+                    f"LIGHTS={int(self._led_on)},"
+                    f"MOTOR_BYPASS={int(self._motor_bypass)},"
+                    f"CHARGE_BYPASS={int(self._charge_bypass)}"
+                    f"{CRLF}OK{CRLF}"
+                ).encode()
+            )
         elif cmd == "AT+DIAG?":
             payload = (
                 "+DIAG:RX_ISR=1,RX_BYTE=2,RX_OVERFLOW=0,RX_ERR=0,ORE=0,NE=0,FE=0,PE=0,"
@@ -139,6 +168,7 @@ class FakeFirmware(QObject):
         elif cmd.startswith("AT+MOTOR="):
             mode = cmd[len("AT+MOTOR="):]
             if mode in ("SLEEP", "WAKE", "FWD", "REV", "BRAKE", "STOP"):
+                self._motor_bypass = False
                 self._motor_mode = mode
                 if mode in ("FWD", "REV"):
                     self._motor_current_ma = 1500
@@ -147,19 +177,46 @@ class FakeFirmware(QObject):
                 transport.feed(b"OK" + CRLF.encode())
             else:
                 transport.feed(b"ERROR:PARSE" + CRLF.encode())
-        elif cmd == "AT+LED=ON":
-            self._led_on = True
+        elif cmd == "AT+MOTOR_BYPASS=ON":
+            if self._motor_mode not in ("FWD", "REV"):
+                transport.feed(b"ERROR:STATE" + CRLF.encode())
+            else:
+                self._motor_bypass = True
+                transport.feed(b"OK" + CRLF.encode())
+        elif cmd == "AT+MOTOR_BYPASS=OFF":
+            self._motor_bypass = False
             transport.feed(b"OK" + CRLF.encode())
+        elif cmd == "AT+CHARGE_BYPASS=ON":
+            if self._power_mode != "CHARGE":
+                transport.feed(b"ERROR:STATE" + CRLF.encode())
+            else:
+                self._charge_bypass = True
+                transport.feed(b"OK" + CRLF.encode())
+        elif cmd == "AT+CHARGE_BYPASS=OFF":
+            self._charge_bypass = False
+            transport.feed(b"OK" + CRLF.encode())
+        elif cmd == "AT+LED=ON":
+            if self._power_mode != "DRIVE":
+                transport.feed(b"ERROR:STATE" + CRLF.encode())
+            else:
+                self._led_on = True
+                transport.feed(b"OK" + CRLF.encode())
         elif cmd == "AT+LED=OFF":
             self._led_on = False
             transport.feed(b"OK" + CRLF.encode())
         elif cmd.startswith("AT+NMOS"):
             try:
                 if cmd == "AT+NMOS1=ON":
+                    if self._power_mode != "DRIVE":
+                        transport.feed(b"ERROR:STATE" + CRLF.encode())
+                        return
                     self._nmos1 = True
                 elif cmd == "AT+NMOS1=OFF":
                     self._nmos1 = False
                 elif cmd == "AT+NMOS2=ON":
+                    if self._power_mode != "DRIVE":
+                        transport.feed(b"ERROR:STATE" + CRLF.encode())
+                        return
                     self._nmos2 = True
                 elif cmd == "AT+NMOS2=OFF":
                     self._nmos2 = False

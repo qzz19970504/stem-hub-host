@@ -14,6 +14,7 @@ from stem_hub_host.at_protocol import (
     cmd_query_diag,
     cmd_query_fault,
     cmd_query_motor,
+    cmd_query_output,
     cmd_query_sense,
     cmd_raw,
     iter_uart_tx_commands,
@@ -22,7 +23,9 @@ from stem_hub_host.at_protocol import (
     cmd_set_drive,
     cmd_set_led,
     cmd_set_motor,
+    cmd_set_motor_bypass,
     cmd_set_nmos,
+    cmd_set_charge_bypass,
     cmd_set_uart2,
     cmd_set_uart23,
     cmd_set_uart3,
@@ -32,6 +35,7 @@ from stem_hub_host.models import (
     DiagInfo,
     FaultState,
     MotorState,
+    OutputState,
     SenseData,
     VersionInfo,
     UartRxFrame,
@@ -74,12 +78,21 @@ class TestCommandBuilders:
     def test_query_motor(self):
         assert cmd_query_motor() == "AT+MOTOR?\r\n"
 
+    def test_query_output(self):
+        assert cmd_query_output() == "AT+OUTPUT?\r\n"
+
     def test_query_diag(self):
         assert cmd_query_diag() == "AT+DIAG?\r\n"
 
     @pytest.mark.parametrize("mode", ["SLEEP", "WAKE", "FWD", "REV", "BRAKE", "STOP"])
     def test_set_motor_all_modes(self, mode):
         assert cmd_set_motor(mode) == f"AT+MOTOR={mode}\r\n"
+
+    def test_set_bypasses(self):
+        assert cmd_set_motor_bypass(True) == "AT+MOTOR_BYPASS=ON\r\n"
+        assert cmd_set_motor_bypass(False) == "AT+MOTOR_BYPASS=OFF\r\n"
+        assert cmd_set_charge_bypass(True) == "AT+CHARGE_BYPASS=ON\r\n"
+        assert cmd_set_charge_bypass(False) == "AT+CHARGE_BYPASS=OFF\r\n"
 
     def test_set_led(self):
         assert cmd_set_led(True) == "AT+LED=ON\r\n"
@@ -226,6 +239,40 @@ class TestParsedResponse:
     def test_motor(self):
         r = ParsedResponse.parse("+MOTOR:MODE=FWD,CURRENT_MA=1234,OVERCURRENT=0,FAULT=0")
         assert r.motor == MotorState(mode="FWD", current_ma=1234, overcurrent=0, fault=0)
+
+    def test_output(self):
+        r = ParsedResponse.parse(
+            "+OUTPUT:POWER=CHARGE,CHARGE_PHASE=OFF,NMOS1=0,NMOS2=1,"
+            "LIGHTS=0,MOTOR_BYPASS=1,CHARGE_BYPASS=1"
+        )
+        assert r.output == OutputState(
+            power="CHARGE",
+            charge_phase="OFF",
+            nmos1=False,
+            nmos2=True,
+            lights=False,
+            motor_bypass=True,
+            charge_bypass=True,
+        )
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "+OUTPUT:POWER=CHARGE,CHARGE_PHASE=OFF,NMOS1=0,NMOS2=1,"
+            "LIGHTS=0,MOTOR_BYPASS=1",
+            "+OUTPUT:POWER=CHARGE,CHARGE_PHASE=OFF,NMOS1=0,NMOS2=1,"
+            "LIGHTS=0,MOTOR_BYPASS=1,CHARGE_BYPASS=1,EXTRA=0",
+            "+OUTPUT:POWER=INVALID,CHARGE_PHASE=OFF,NMOS1=0,NMOS2=1,"
+            "LIGHTS=0,MOTOR_BYPASS=1,CHARGE_BYPASS=1",
+            "+OUTPUT:POWER=CHARGE,CHARGE_PHASE=OFF,NMOS1=2,NMOS2=1,"
+            "LIGHTS=0,MOTOR_BYPASS=1,CHARGE_BYPASS=1",
+            "+OUTPUT:POWER=CHARGE,POWER=DRIVE,CHARGE_PHASE=OFF,NMOS1=0,"
+            "NMOS2=1,LIGHTS=0,MOTOR_BYPASS=1,CHARGE_BYPASS=1",
+        ],
+    )
+    def test_malformed_output_is_rejected(self, line):
+        parsed = ParsedResponse.parse(line)
+        assert parsed.output is None
 
     def test_version(self):
         r = ParsedResponse.parse("+VERSION:release-v2.1")

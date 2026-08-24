@@ -34,7 +34,7 @@ class AtError:
 # ---- 握手 ----
 @dataclass(frozen=True)
 class VersionInfo:
-    """`+VERSION:release-v3.2` 响应."""
+    """`+VERSION:release-v3.3` response."""
 
     version: str
 
@@ -184,6 +184,65 @@ class MotorState:
             )
         except (KeyError, ValueError):
             return None
+
+
+# ---- 输出 ----
+@dataclass(frozen=True)
+class OutputState:
+    """Firmware-confirmed release-v3.3 output state."""
+
+    power: str  # OFF / CHARGE / DRIVE
+    charge_phase: str  # IDLE / ON / OFF
+    nmos1: bool
+    nmos2: bool
+    lights: bool
+    motor_bypass: bool
+    charge_bypass: bool
+
+    @classmethod
+    def parse(cls, line: str) -> "OutputState | None":
+        line = line.strip()
+        prefix = "+OUTPUT:"
+        if not line.startswith(prefix):
+            return None
+
+        required_keys = {
+            "POWER",
+            "CHARGE_PHASE",
+            "NMOS1",
+            "NMOS2",
+            "LIGHTS",
+            "MOTOR_BYPASS",
+            "CHARGE_BYPASS",
+        }
+        fields: dict[str, str] = {}
+        for item in line[len(prefix):].split(","):
+            if item.count("=") != 1:
+                return None
+            key, value = item.split("=", 1)
+            key = key.strip()
+            if key in fields:
+                return None
+            fields[key] = value.strip()
+        if fields.keys() != required_keys:
+            return None
+        if fields["POWER"] not in {"OFF", "CHARGE", "DRIVE"}:
+            return None
+        if fields["CHARGE_PHASE"] not in {"IDLE", "ON", "OFF"}:
+            return None
+        boolean_keys = required_keys - {"POWER", "CHARGE_PHASE"}
+        if any(fields[key] not in {"0", "1"} for key in boolean_keys):
+            return None
+
+        return cls(
+            power=fields["POWER"],
+            charge_phase=fields["CHARGE_PHASE"],
+            nmos1=fields["NMOS1"] == "1",
+            nmos2=fields["NMOS2"] == "1",
+            lights=fields["LIGHTS"] == "1",
+            motor_bypass=fields["MOTOR_BYPASS"] == "1",
+            charge_bypass=fields["CHARGE_BYPASS"] == "1",
+        )
 
 
 # ---- 诊断 ----

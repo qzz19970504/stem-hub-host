@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from stem_hub_host.app import get_app
 from stem_hub_host.controller import Controller
-from stem_hub_host.models import FaultState, MotorState, SenseData
+from stem_hub_host.models import FaultState, MotorState, OutputState, SenseData
 from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
 from stem_hub_host.ui.main_window import MainWindow
@@ -47,6 +47,7 @@ def test_output_card_exposes_only_real_toggle_controls(
 ) -> None:
     assert set(output_card.control_names) == {
         "CHARGE",
+        "CHARGE_BYPASS",
         "DRIVE",
         "NMOS1",
         "NMOS2",
@@ -54,6 +55,44 @@ def test_output_card_exposes_only_real_toggle_controls(
     }
     assert "BALANCING" not in output_card.control_names
     assert output_card.all_off_button.text() == "ALL OFF"
+
+
+def test_charge_bypass_is_vertically_aligned_with_lights(
+    output_card: ChargeModeCard,
+    qapp: QApplication,
+) -> None:
+    output_card.setFixedSize(520, 430)
+    output_card.show()
+    qapp.processEvents()
+
+    bypass_x = output_card._cells["CHARGE_BYPASS"].toggle.mapTo(
+        output_card,
+        output_card._cells["CHARGE_BYPASS"].toggle.rect().center(),
+    ).x()
+    lights_x = output_card._cells["LIGHTS"].toggle.mapTo(
+        output_card,
+        output_card._cells["LIGHTS"].toggle.rect().center(),
+    ).x()
+
+    assert abs(bypass_x - lights_x) <= 2
+    assert output_card.drive_hierarchy.objectName() == "driveHierarchy"
+
+
+def test_output_parent_child_gates_are_independent(
+    output_card: ChargeModeCard,
+) -> None:
+    output_card.set_enabled(True)
+    output_card.set_control_enabled("CHARGE_BYPASS", False)
+    for name in ("NMOS1", "NMOS2", "LIGHTS"):
+        output_card.set_control_enabled(name, False)
+
+    assert output_card._cells["CHARGE"].toggle.isEnabled()
+    assert output_card._cells["DRIVE"].toggle.isEnabled()
+    assert not output_card._cells["CHARGE_BYPASS"].toggle.isEnabled()
+    assert all(
+        not output_card._cells[name].toggle.isEnabled()
+        for name in ("NMOS1", "NMOS2", "LIGHTS")
+    )
 
 
 def test_all_off_is_centered_below_the_five_output_switches(
@@ -76,6 +115,28 @@ def test_all_off_is_centered_below_the_five_output_switches(
     assert output_card.all_off_row.objectName() == "allOffRow"
     assert all_off_center.y() > lowest_toggle_y
     assert abs(all_off_center.x() - output_card.width() / 2) < 8
+
+
+def test_fault_rows_use_the_lower_card_area_without_dead_space(
+    output_card: ChargeModeCard,
+    qapp: QApplication,
+) -> None:
+    output_card.setFixedSize(520, 430)
+    output_card.show()
+    qapp.processEvents()
+
+    fault_bottom = max(
+        fault.mapTo(output_card, fault.rect().bottomLeft()).y()
+        for fault in (
+            output_card.fault_overtemp,
+            output_card.fault_overcurrent,
+            output_card.fault_undervoltage,
+            output_card.fault_drv,
+            output_card.fault_aux,
+        )
+    )
+
+    assert output_card.height() - fault_bottom <= 55
 
 
 def test_charge_and_drive_are_mutually_exclusive(
@@ -121,7 +182,9 @@ def test_power_off_failure_restores_confirmed_drive_without_key_error(
     window: MainWindow,
 ) -> None:
     card = window.console_tab.charge_card
-    window._controller._confirmed_power_mode = "drive"
+    window._controller._latest_output = OutputState(
+        "DRIVE", "IDLE", False, False, False, False, False
+    )
     card.clear_controls()
 
     window._on_output_command_failed("POWER", False, "OUTPUT_QUEUE")
@@ -173,3 +236,41 @@ def test_sensor_and_fault_data_drive_honest_indicators(
     assert card.fault_undervoltage.state == "error"
     assert card.fault_drv.state == "error"
     assert card.fault_aux.state == "ok"
+
+
+def test_confirmed_output_state_drives_switches_and_child_gates(
+    window: MainWindow,
+) -> None:
+    window._handshake_connected = True
+    window._controller._latest_motor = MotorState("FWD", 500, 0, 0)
+    window._controller._latest_output = OutputState(
+        "DRIVE", "IDLE", True, False, True, True, False
+    )
+
+    window._refresh_ui_from_state()
+
+    output_card = window.console_tab.charge_card
+    motor_card = window.console_tab.motor_card
+    assert output_card.is_on("DRIVE")
+    assert not output_card.is_on("CHARGE")
+    assert output_card.is_on("NMOS1")
+    assert output_card.is_on("LIGHTS")
+    assert not output_card.is_on("CHARGE_BYPASS")
+    assert output_card._cells["NMOS1"].toggle.isEnabled()
+    assert not output_card._cells["CHARGE_BYPASS"].toggle.isEnabled()
+    assert motor_card.bypass_toggle.is_on()
+    assert motor_card.bypass_toggle.isEnabled()
+
+
+def test_motor_bypass_is_disabled_outside_confirmed_motion(
+    window: MainWindow,
+) -> None:
+    window._handshake_connected = True
+    window._controller._latest_motor = MotorState("STOP", 0, 0, 0)
+    window._controller._latest_output = OutputState(
+        "OFF", "IDLE", False, False, False, False, False
+    )
+
+    window._refresh_ui_from_state()
+
+    assert not window.console_tab.motor_card.bypass_toggle.isEnabled()

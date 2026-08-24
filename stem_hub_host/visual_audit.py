@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication
 
 from .app import get_app
 from .controller import Controller
-from .models import FaultState, MotorState, SenseData
+from .models import FaultState, MotorState, OutputState, SenseData
 from .serial_worker import SerialWorker
 from .transport import FakeSerialTransport
 from .ui.main_window import MainWindow
@@ -107,6 +107,9 @@ def _seed_connected(window: MainWindow) -> None:
         fault=0,
     )
     controller._latest_fault = FaultState(drv=0, aux=0)
+    controller._latest_output = OutputState(
+        "DRIVE", "IDLE", False, False, True, True, False
+    )
     window._refresh_ui_from_state()
 
     # Force every animated widget to its deterministic terminal state.
@@ -120,20 +123,15 @@ def _seed_connected(window: MainWindow) -> None:
     ):
         tile.set_value(value, animate=False)
 
-    charge_card = window.console_tab.charge_card
-    charge_card.clear_controls()
-    charge_card.set_toggle("DRIVE", True, animate=False)
-    charge_card.set_toggle("LIGHTS", True, animate=False)
-
     _clear_console(window)
     console = window.console_tab.at_console
     console.append_log("TX", "AT+MOTOR=FWD")
     console.append_log("RX", "OK")
     console.append_log("TX", "AT+GET=VOLTAGE")
     console.append_log("RX", "37.0V")
-    console.append_info("Handshake OK: firmware release-v3.2")
+    console.append_info("Handshake OK: firmware release-v3.3")
 
-    window.console_tab.serial_bar.set_handshake_ok("release-v3.2")
+    window.console_tab.serial_bar.set_handshake_ok("release-v3.3")
     window._apply_handshake_gate(connected=True)
 
 
@@ -142,6 +140,7 @@ def _seed_disconnected(window: MainWindow) -> None:
     controller._latest_sense = None
     controller._latest_motor = None
     controller._latest_fault = None
+    controller._latest_output = None
     window.console_tab.serial_bar.set_disconnected()
     window.console_tab.battery_card.update_from_sense(None)
     window.console_tab.temp_grid.update_from_sense(None)

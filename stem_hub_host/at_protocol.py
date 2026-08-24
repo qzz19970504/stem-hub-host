@@ -16,6 +16,7 @@ from .models import (
     DiagInfo,
     FaultState,
     MotorState,
+    OutputState,
     SenseData,
     UartRxFrame,
     VersionInfo,
@@ -43,6 +44,10 @@ def cmd_query_motor() -> str:
     return f"AT+MOTOR?{CRLF}"
 
 
+def cmd_query_output() -> str:
+    return f"AT+OUTPUT?{CRLF}"
+
+
 def cmd_query_diag() -> str:
     return f"AT+DIAG?{CRLF}"
 
@@ -50,6 +55,14 @@ def cmd_query_diag() -> str:
 def cmd_set_motor(mode: str) -> str:
     """mode: SLEEP / WAKE / FWD / REV / BRAKE / STOP."""
     return f"AT+MOTOR={mode}{CRLF}"
+
+
+def cmd_set_motor_bypass(on: bool) -> str:
+    return f"AT+MOTOR_BYPASS={'ON' if on else 'OFF'}{CRLF}"
+
+
+def cmd_set_charge_bypass(on: bool) -> str:
+    return f"AT+CHARGE_BYPASS={'ON' if on else 'OFF'}{CRLF}"
 
 
 def cmd_set_led(on: bool) -> str:
@@ -121,6 +134,7 @@ class ParsedResponse:
     sense: Optional[SenseData] = None
     fault: Optional[FaultState] = None
     motor: Optional[MotorState] = None
+    output: Optional[OutputState] = None
     version: Optional[VersionInfo] = None
     diag: Optional[DiagInfo] = None
     uart_rx: Optional[UartRxFrame] = None
@@ -147,6 +161,10 @@ class ParsedResponse:
             d = MotorState.parse(s)
             if d is not None:
                 return cls(raw_line=line, motor=d)
+        if s.startswith("+OUTPUT:"):
+            d = OutputState.parse(s)
+            if d is not None:
+                return cls(raw_line=line, output=d)
         if s.startswith("+VERSION:"):
             d = VersionInfo.parse(s)
             if d is not None:

@@ -67,6 +67,33 @@ def test_motor_buttons_follow_confirmed_mode(qapp: QApplication) -> None:
     qapp.processEvents()
 
 
+def test_motor_status_surface_combines_current_and_bypass(
+    qapp: QApplication,
+) -> None:
+    card = MotorCard()
+    card.setFixedSize(650, 410)
+    card.show()
+    qapp.processEvents()
+
+    assert "border-radius: 14px" in card.current_badge.styleSheet()
+    assert card.bypass_toggle.parent() is card.current_badge
+    assert card.current_badge._label.geometry().center().x() < (
+        card.bypass_toggle.mapTo(card.current_badge, card.bypass_toggle.rect().center()).x()
+    )
+
+    card.deleteLater()
+    qapp.processEvents()
+
+
+def test_motor_mode_buttons_use_confirmed_industrial_icon_set() -> None:
+    from stem_hub_host.ui.widgets import motor_card
+
+    assert callable(motor_card._draw_power_standby)
+    assert callable(motor_card._draw_power_active)
+    assert callable(motor_card._draw_brake_disc)
+    assert callable(motor_card._draw_stop_square)
+
+
 def test_thermal_gauge_reuses_one_animation_for_repeated_updates(
     qapp: QApplication,
 ) -> None:

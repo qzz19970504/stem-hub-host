@@ -46,8 +46,8 @@ def test_handshake(fake_pair):
     worker, fw = fake_pair
     resp = worker.send_and_wait(cmd_handshake(), timeout_ms=500)
     assert resp.ok
-    assert fw.VERSION == "release-v3.2"
-    assert resp.version.version == "release-v3.2"
+    assert fw.VERSION == "release-v3.3"
+    assert resp.version.version == "release-v3.3"
     # 之前 at_data_received 触发过, 但我们直接看 response
 
 
@@ -99,6 +99,56 @@ def test_power_modes_are_mutually_exclusive_in_fake_firmware(fake_pair):
     assert not old_command.ok
     assert old_command.error is not None
     assert old_command.error.code == "PARSE"
+
+
+def test_fake_firmware_reports_and_enforces_v33_output_state(fake_pair):
+    from stem_hub_host.at_protocol import (
+        cmd_query_output,
+        cmd_set_drive,
+        cmd_set_led,
+        cmd_set_nmos,
+    )
+    from stem_hub_host.models import OutputState
+
+    worker, _firmware = fake_pair
+
+    rejected = worker.send_and_wait(cmd_set_nmos(1, True), timeout_ms=500)
+    assert rejected.error.code == "STATE"
+    assert worker.send_and_wait(cmd_set_led(True), timeout_ms=500).error.code == "STATE"
+
+    assert worker.send_and_wait(cmd_set_drive(True), timeout_ms=500).ok
+    assert worker.send_and_wait(cmd_set_nmos(1, True), timeout_ms=500).ok
+    assert worker.send_and_wait(cmd_set_led(True), timeout_ms=500).ok
+    state = worker.send_and_wait(cmd_query_output(), timeout_ms=500).output
+    assert state == OutputState("DRIVE", "IDLE", True, False, True, False, False)
+
+    assert worker.send_and_wait(cmd_set_drive(False), timeout_ms=500).ok
+    state = worker.send_and_wait(cmd_query_output(), timeout_ms=500).output
+    assert state == OutputState("OFF", "IDLE", False, False, False, False, False)
+
+
+def test_fake_firmware_enforces_bypass_activation_modes(fake_pair):
+    from stem_hub_host.at_protocol import (
+        cmd_query_output,
+        cmd_set_charge,
+        cmd_set_charge_bypass,
+        cmd_set_motor,
+        cmd_set_motor_bypass,
+    )
+
+    worker, _firmware = fake_pair
+
+    assert worker.send_and_wait(cmd_set_charge_bypass(True), timeout_ms=500).error.code == "STATE"
+    assert worker.send_and_wait(cmd_set_charge(True), timeout_ms=500).ok
+    assert worker.send_and_wait(cmd_set_charge_bypass(True), timeout_ms=500).ok
+    assert worker.send_and_wait(cmd_query_output(), timeout_ms=500).output.charge_bypass
+
+    assert worker.send_and_wait(cmd_set_motor_bypass(True), timeout_ms=500).error.code == "STATE"
+    assert worker.send_and_wait(cmd_set_motor("FWD"), timeout_ms=500).ok
+    assert worker.send_and_wait(cmd_set_motor_bypass(True), timeout_ms=500).ok
+    assert worker.send_and_wait(cmd_query_output(), timeout_ms=500).output.motor_bypass
+    assert worker.send_and_wait(cmd_set_motor("REV"), timeout_ms=500).ok
+    assert not worker.send_and_wait(cmd_query_output(), timeout_ms=500).output.motor_bypass
 
 
 def test_error_response(fake_pair):

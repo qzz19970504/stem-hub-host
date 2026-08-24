@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QApplication
 from stem_hub_host.controller import Controller
 from stem_hub_host.data_buffer import DataBuffer
 from stem_hub_host.fake_firmware import FakeFirmware
-from stem_hub_host.models import FaultState, MotorState, SenseData
+from stem_hub_host.at_protocol import ParsedResponse
+from stem_hub_host.models import FaultState, MotorState, OutputState, SenseData
 from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
 from stem_hub_host.ui.main_window import MainWindow
@@ -32,6 +33,9 @@ def test_disconnect_clears_controller_telemetry_cache() -> None:
     )
     controller._latest_motor = MotorState("FWD", 1000, 0, 0)
     controller._latest_fault = FaultState(0, 0)
+    controller._latest_output = OutputState(
+        "DRIVE", "IDLE", True, False, True, False, False
+    )
 
     controller._on_worker_disconnected()
 
@@ -39,7 +43,68 @@ def test_disconnect_clears_controller_telemetry_cache() -> None:
         "sense": None,
         "motor": None,
         "fault": None,
+        "output": None,
     }
+
+
+def test_periodic_poll_includes_full_output_query() -> None:
+    worker = SerialWorker(FakeSerialTransport())
+    controller = Controller(worker)
+    controller._is_open = True
+    controller._handshake_ok = True
+    commands: list[str] = []
+    worker.send_command = commands.append  # type: ignore[method-assign]
+
+    controller._poll_once()
+
+    assert commands == [
+        "AT+SENSE?\r\n",
+        "AT+FAULT?\r\n",
+        "AT+MOTOR?\r\n",
+        "AT+OUTPUT?\r\n",
+    ]
+
+
+def test_output_query_is_the_only_source_of_confirmed_output_state() -> None:
+    controller = Controller(SerialWorker(FakeSerialTransport()))
+    state = OutputState("CHARGE", "OFF", False, False, False, False, True)
+
+    controller._on_at_data(
+        "AT+OUTPUT?\r\n",
+        ParsedResponse(raw_line="+OUTPUT:...", output=state),
+    )
+
+    assert controller.get_latest()["output"] == state
+    assert controller.confirmed_power_mode == "charge"
+
+
+def test_successful_output_command_triggers_confirmation_query() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    assert worker.open("FAKE0", 115200)
+
+    controller.set_led(False)
+    assert transport.get_written() == b"AT+LED=OFF\r\n"
+    transport.feed(b"OK\r\n")
+
+    assert transport.get_written() == b"AT+LED=OFF\r\nAT+OUTPUT?\r\n"
+
+
+def test_rejected_output_command_keeps_last_confirmed_state() -> None:
+    transport = FakeSerialTransport()
+    worker = SerialWorker(transport)
+    controller = Controller(worker)
+    controller._latest_output = OutputState(
+        "DRIVE", "IDLE", False, False, False, False, False
+    )
+    assert worker.open("FAKE0", 115200)
+
+    controller.set_led(True)
+    transport.feed(b"ERROR:STATE\r\n")
+
+    assert controller.get_latest()["output"].lights is False
+    assert transport.get_written() == b"AT+LED=ON\r\n"
 
 
 def test_data_buffer_ingests_all_semantic_channels_once_per_tick() -> None:
@@ -342,6 +407,7 @@ def test_rapid_charge_mode_requests_are_serialized() -> None:
     assert transport.get_written() == (
         b"AT+CHARGE=ON\r\n"
         b"AT+DRIVE=ON\r\n"
+        b"AT+OUTPUT?\r\n"
     )
 
 
@@ -353,6 +419,8 @@ def test_all_outputs_off_waits_for_each_ack_in_safe_order() -> None:
 
     controller.set_all_outputs_off()
     expected_commands = (
+        b"AT+MOTOR_BYPASS=OFF\r\n",
+        b"AT+CHARGE_BYPASS=OFF\r\n",
         b"AT+POWER=OFF\r\n",
         b"AT+NMOS1=OFF\r\n",
         b"AT+NMOS2=OFF\r\n",
@@ -365,6 +433,7 @@ def test_all_outputs_off_waits_for_each_ack_in_safe_order() -> None:
         transport.feed(b"OK\r\n")
 
     assert not controller._charge_transition_active
+    assert transport.get_written().endswith(b"AT+OUTPUT?\r\n")
 
 
 def test_rapid_uart_mode_requests_are_serialized() -> None:
@@ -507,7 +576,7 @@ def test_fast_reconnect_cancels_stale_delayed_handshake() -> None:
     assert worker.open("FAKE1", 115200)
     QTimer.singleShot(
         240,
-        lambda: transport.feed(b"+VERSION:release-v3.2\r\nOK\r\n"),
+        lambda: transport.feed(b"+VERSION:release-v3.3\r\nOK\r\n"),
     )
     QTest.qWait(320)
 
@@ -555,7 +624,16 @@ def test_rejected_motor_command_restores_last_confirmed_mode() -> None:
     window._apply_handshake_gate(True)
     controller._on_at_data(
         "AT+MOTOR?\r\n",
-        type("Response", (), {"sense": None, "motor": MotorState("FWD", 900, 0, 0), "fault": None})(),
+        type(
+            "Response",
+            (),
+            {
+                "sense": None,
+                "motor": MotorState("FWD", 900, 0, 0),
+                "fault": None,
+                "output": None,
+            },
+        )(),
     )
     window.console_tab.motor_card.update_state("FWD", 900, 0, 0)
 
@@ -584,7 +662,11 @@ def test_completed_handshake_enables_every_gated_surface() -> None:
 
     assert controller.is_handshake_ok
     assert window.console_tab.serial_bar.status_badge.text() == "CONNECTED"
-    assert window.console_tab.charge_card._cells["LIGHTS"].toggle.isEnabled()
+    output_card = window.console_tab.charge_card
+    assert output_card._cells["CHARGE"].toggle.isEnabled()
+    assert output_card._cells["DRIVE"].toggle.isEnabled()
+    assert not output_card._cells["CHARGE_BYPASS"].toggle.isEnabled()
+    assert not output_card._cells["LIGHTS"].toggle.isEnabled()
     assert window.passthrough_tab.panel.btn_uart2.isEnabled()
     assert not window.passthrough_tab.panel.send_btn.isEnabled()
     window.close()

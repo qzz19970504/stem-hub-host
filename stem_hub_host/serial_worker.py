@@ -269,6 +269,7 @@ class SerialWorker(QObject):
                 resp.sense = data.sense or resp.sense
                 resp.fault = data.fault or resp.fault
                 resp.motor = data.motor or resp.motor
+                resp.output = data.output or resp.output
                 resp.version = data.version or resp.version
                 resp.diag = data.diag or resp.diag
             cur.finished = True
@@ -282,7 +283,14 @@ class SerialWorker(QObject):
             except SerialError as error:
                 self.error_occurred.emit(f"串口发送队列失败: {error}")
                 self.close()
-        elif resp.sense or resp.fault or resp.motor or resp.version or resp.diag:
+        elif (
+            resp.sense
+            or resp.fault
+            or resp.motor
+            or resp.output
+            or resp.version
+            or resp.diag
+        ):
             cur.on_data = resp
             self.at_data_received.emit(cur.command, resp)
 
