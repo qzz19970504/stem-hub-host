@@ -74,7 +74,7 @@ def test_success_cancels_deadline_and_starts_polling() -> None:
     assert worker.open("FAKE0", 115200)
     QTimer.singleShot(
         5,
-        lambda: transport.feed(b"+VERSION:release-v3.2\r\nOK\r\n"),
+        lambda: transport.feed(b"+VERSION:release-v3.3\r\nOK\r\n"),
     )
     QTest.qWait(60)
 
@@ -162,7 +162,7 @@ def test_fast_reconnect_ignores_old_connection_timers() -> None:
     assert worker.open("FAKE1", 115200)
     QTimer.singleShot(
         5,
-        lambda: transport.feed(b"+VERSION:release-v3.2\r\nOK\r\n"),
+        lambda: transport.feed(b"+VERSION:release-v3.3\r\nOK\r\n"),
     )
     QTest.qWait(160)
 

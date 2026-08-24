@@ -37,7 +37,7 @@ class _ToggleCell(QWidget):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         f = QFont(theme.FONT_MONO.split(",")[0].strip())
-        f.setPointSize(11)
+        f.setPointSize(9 if len(name) > 10 else 11)
         f.setBold(True)
         self.label.setFont(f)
         self.label.setStyleSheet(
@@ -96,12 +96,25 @@ class ChargeModeCard(QFrame):
         content_layout.setSpacing(theme.LAYOUT_GAP_CONTROL)
 
         self._cells: dict[str, _ToggleCell] = {}
-        top_row = self._make_toggle_row(["CHARGE", "DRIVE"])
+        top_row = QHBoxLayout()
+        top_row.setSpacing(theme.LAYOUT_GAP_CONTROL)
+        top_row.addWidget(self._make_toggle_cell("CHARGE"), 1)
+        top_row.addWidget(QWidget(self), 1)
+        top_row.addWidget(QWidget(self), 1)
+        top_row.addWidget(self._make_toggle_cell("CHARGE_BYPASS"), 1)
         content_layout.addLayout(top_row)
 
-        content_layout.addLayout(self._make_toggle_row(
-            ["NMOS1", "NMOS2", "LIGHTS"]
-        ))
+        self.drive_hierarchy = QFrame(self)
+        self.drive_hierarchy.setObjectName("driveHierarchy")
+        self.drive_hierarchy.setStyleSheet(
+            f"QFrame#driveHierarchy {{ border-top: 1px solid {theme.BORDER}; }}"
+        )
+        drive_row = QHBoxLayout(self.drive_hierarchy)
+        drive_row.setContentsMargins(0, 5, 0, 0)
+        drive_row.setSpacing(theme.LAYOUT_GAP_CONTROL)
+        for name in ("DRIVE", "NMOS1", "NMOS2", "LIGHTS"):
+            drive_row.addWidget(self._make_toggle_cell(name), 1)
+        content_layout.addWidget(self.drive_hierarchy)
 
         self.all_off_row = QFrame(self)
         self.all_off_row.setObjectName("allOffRow")
@@ -143,21 +156,18 @@ class ChargeModeCard(QFrame):
         fault_grid.addWidget(self.fault_undervoltage, 0, 2)
         fault_grid.addWidget(self.fault_drv, 1, 0)
         fault_grid.addWidget(self.fault_aux, 1, 1)
+        fault_grid.setRowStretch(0, 1)
+        fault_grid.setRowStretch(1, 1)
 
-        outer.addLayout(fault_grid)
-        outer.addStretch(1)
+        outer.addLayout(fault_grid, 1)
 
-    def _make_toggle_row(self, names: list[str]) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setSpacing(theme.LAYOUT_GAP_CONTROL)
-        for name in names:
-            cell = _ToggleCell(name, self)
-            cell.toggle.toggled.connect(
-                lambda on, n=name: self.toggle_changed.emit(n, on)
-            )
-            self._cells[name] = cell
-            row.addWidget(cell, 1)
-        return row
+    def _make_toggle_cell(self, name: str) -> _ToggleCell:
+        cell = _ToggleCell(name, self)
+        cell.toggle.toggled.connect(
+            lambda on, n=name: self.toggle_changed.emit(n, on)
+        )
+        self._cells[name] = cell
+        return cell
 
     def is_on(self, name: str) -> bool:
         return self._cells[name].toggle.is_on()
@@ -172,13 +182,17 @@ class ChargeModeCard(QFrame):
         self._cells[name].toggle.set_on(on, animate=animate)
 
     def set_enabled(self, enabled: bool) -> None:
-        for cell in self._cells.values():
-            cell.toggle.setEnabled(enabled)
-            color = theme.FG_PRIMARY if enabled else theme.FG_DISABLED
-            cell.label.setStyleSheet(
-                f"color: {color}; background: transparent; letter-spacing: 1.5px;"
-            )
+        for name in self._cells:
+            self.set_control_enabled(name, enabled)
         self.all_off_button.setEnabled(enabled)
+
+    def set_control_enabled(self, name: str, enabled: bool) -> None:
+        cell = self._cells[name]
+        cell.toggle.setEnabled(enabled)
+        color = theme.FG_PRIMARY if enabled else theme.FG_DISABLED
+        cell.label.setStyleSheet(
+            f"color: {color}; background: transparent; letter-spacing: 1.5px;"
+        )
 
     def update_fault(
         self,
@@ -224,5 +238,8 @@ class ChargeModeCard(QFrame):
             f"background-color: {theme.BG_CARD};"
         )
         self.set_enabled(self.all_off_button.isEnabled())
+        self.drive_hierarchy.setStyleSheet(
+            f"QFrame#driveHierarchy {{ border-top: 1px solid {theme.BORDER}; }}"
+        )
         for cell in self._cells.values():
             cell.toggle.update()

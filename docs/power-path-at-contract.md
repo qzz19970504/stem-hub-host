@@ -1,6 +1,6 @@
-# v3.2 电源路径与温度遥测 AT 契约
+# v3.3 输出状态、旁路与电源路径 AT 契约
 
-本文档定义 `stem-hub-host` 与 `stem-hub release-v3.2` 之间的电源路径和温度遥测契约。上位机只请求业务模式，LM51770 与 MP4317 的互锁、GPIO 时序、间歇充电计时和温度保护由 MCU 单点保证。
+本文档定义 `stem-hub-host` 与 `stem-hub release-v3.3` 之间的输出控制契约。上位机只请求业务模式，互锁、GPIO 时序、间歇充电、旁路锁存和温度保护由 MCU 单点保证。
 
 ## 三种允许的物理状态
 
@@ -33,7 +33,7 @@
 - CHARGE 开关打开：发送 `AT+CHARGE=ON`；开关保持打开表示间歇循环已启用，不表示当前 EN 电平。
 - DRIVE 开关打开：发送 `AT+DRIVE=ON`。
 - 任一模式开关关闭：发送该模式的 `OFF`，结果均为两路全关。
-- ALL OFF：先发送 `AT+POWER=OFF`，再按现有流程关闭 NMOS1、NMOS2 和灯光。
+- ALL OFF：关闭两路旁路、电源路径、NMOS1、NMOS2 和 LIGHTS，不改变独立电机模式。
 - fake firmware 使用相同的三态和五条命令，便于无硬件回归。
 
 模式切换请求继续走上位机现有的串行命令队列，避免多个 UI 操作交叠。MCU 仍是最终安全边界，即使绕开 UI 直接写串口也无法通过有效 AT 指令同时打开两路。
@@ -48,9 +48,24 @@ LM51770 EN/UVLO（PB3）和 MP4317 控制（PA8）都是低电平使能。对于
 
 因此可观察到的最终 GPIO 组合只有 `PB3=1/PA8=1`、`PB3=0/PA8=1`、`PB3=1/PA8=0`。
 
+## 输出状态、旁路与子项联锁
+
+`AT+OUTPUT?` 固定返回：
+
+```text
++OUTPUT:POWER=<OFF|CHARGE|DRIVE>,CHARGE_PHASE=<IDLE|ON|OFF>,NMOS1=<0|1>,NMOS2=<0|1>,LIGHTS=<0|1>,MOTOR_BYPASS=<0|1>,CHARGE_BYPASS=<0|1>
+OK
+```
+
+上位机严格要求完整、无重复且合法的字段集合，并以该回读作为唯一输出确认状态。控制命令成功后额外查询一次，命令拒绝、超时或查询失败时保留上一次确认状态。
+
+- PC14 的 CHARGE BYPASS 只要求请求模式为 CHARGE，不要求当前处于周期 ON；开启后跨周期 OFF 保持，离开 CHARGE 或安全停机时清除。
+- PC13 的 MOTOR BYPASS 仅在 FWD/REV 可开启，换向、STOP、BRAKE、SLEEP、堵转或安全停机时清除。
+- NMOS1、NMOS2、LIGHTS 只有 DRIVE 模式可开启；离开 DRIVE 自动关闭。所有 OFF 请求始终允许。
+
 ## 安全边界
 
-默认 10 秒开 / 50 秒关及可配置的 n/(60-n) 周期都只是时间降额措施。v3.2 另由 MCU_C、LM51770_C、MP4317_C、DRV8874_C、CHARGE_MOS_C 五路器件 NTC 执行软件保护：任一路严格高于 60.0°C、无效或读取失败即安全停机；只有五路全部有效且不高于 55.0°C 才解除锁存。BATT_NTC 仅显示。软件保护仍不能替代硬件限流、功率器件选型和散热设计。
+默认 10 秒开 / 50 秒关及可配置的 n/(60-n) 周期都只是时间降额措施。MCU_C、LM51770_C、MP4317_C、DRV8874_C、CHARGE_MOS_C 五路器件 NTC 执行软件保护：任一路严格高于 60.0°C、无效或读取失败即安全停机；只有五路全部有效且不高于 55.0°C 才解除锁存。BATT_NTC 仅显示。软件保护仍不能替代硬件限流、功率器件选型和散热设计。
 
 ## 传感采样语义
 
@@ -62,11 +77,11 @@ BATT_NTC、BATT_V 与五路器件 NTC 使用同步七通道 1 Hz 滚动窗口。
 
 ## 版本门禁
 
-上位机只接受精确的 `+VERSION:release-v3.2` 后跟 `OK`。任何其他版本都会关闭串口并报告 `INCOMPATIBLE_VERSION`，不会进入已连接状态或发送 CHARGE/DRIVE 命令。
+上位机只接受精确的 `+VERSION:release-v3.3` 后跟 `OK`。任何其他版本都会关闭串口并报告 `INCOMPATIBLE_VERSION`，不会进入已连接状态或发送输出命令。
 
 ## 联调清单
 
-1. 用 `AT+VERSION?` 确认返回 `+VERSION:release-v3.2`。
+1. 用 `AT+VERSION?` 确认返回 `+VERSION:release-v3.3`，并严格解析 `AT+OUTPUT?`。
 2. 依次发送五条有效命令，确认均返回 `OK`。
 3. 发送四条旧独立芯片命令和 `AT+POWER=ON`，确认均返回 `ERROR:PARSE`。
 4. 默认配置下验证 CHARGE 在约 10 秒转全关、约 60 秒重新开启；再通过串口设置一个 `AT+CHARGE_TIME=n` 值，确认下一完整周期采用 n/(60-n) 秒且重复 CHARGE 不延长当前开启段。

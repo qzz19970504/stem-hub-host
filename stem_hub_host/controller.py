@@ -3,7 +3,7 @@
 - 持有 SerialWorker 实例
 - 监听 UI 信号 → 翻译成 AT 命令下发
 - 监听 SerialWorker 响应 → 推送到 UI 更新
-- 周期拉取 SENSE/FAULT/MOTOR
+- 周期拉取 SENSE/FAULT/MOTOR/OUTPUT
 - 握手: 打开串口后 200ms 发起 AT+VERSION?, 500ms 内回 OK + 有效版本即成功
 """
 from __future__ import annotations
@@ -19,13 +19,16 @@ from .at_protocol import (
     cmd_handshake,
     cmd_query_fault,
     cmd_query_motor,
+    cmd_query_output,
     cmd_query_sense,
     iter_uart_tx_commands,
     cmd_set_charge,
     cmd_set_drive,
     cmd_set_led,
     cmd_set_motor,
+    cmd_set_motor_bypass,
     cmd_set_nmos,
+    cmd_set_charge_bypass,
     cmd_set_uart2,
     cmd_set_uart23,
     cmd_set_uart3,
@@ -37,7 +40,7 @@ from .serial_worker import SerialError, SerialTimeout, SerialWorker
 
 SENSE_HZ_OPTIONS = (0.2, 0.4, 0.6, 0.8, 1.0)
 DEFAULT_SENSE_HZ = 1.0
-POWER_PROTOCOL_VERSION = "release-v3.2"
+POWER_PROTOCOL_VERSION = "release-v3.3"
 
 
 def normalize_sense_hz(hz: float) -> float:
@@ -95,6 +98,7 @@ class Controller(QObject):
         self._confirmed_motor_mode: str | None = None
         self._confirmed_power_mode = "off"
         self._latest_fault = None
+        self._latest_output = None
         self._pending_outputs: dict[
             str,
             deque[
@@ -199,7 +203,7 @@ class Controller(QObject):
         self._sense_timer.stop()
 
     def _poll_once(self) -> None:
-        """发 SENSE / FAULT / MOTOR 查询, 不阻塞 (用 send_only 让响应自然回来)."""
+        """Queue all periodic state queries without blocking the UI thread."""
         if (
             not self._is_open
             or not self._handshake_ok
@@ -211,6 +215,7 @@ class Controller(QObject):
             self._worker.send_command(cmd_query_sense())
             self._worker.send_command(cmd_query_fault())
             self._worker.send_command(cmd_query_motor())
+            self._worker.send_command(cmd_query_output())
         except SerialError as error:
             self._on_worker_error(f"状态查询暂停: {error}")
 
@@ -225,6 +230,12 @@ class Controller(QObject):
 
     def set_nmos(self, idx: int, on: bool) -> None:
         self._send_output(cmd_set_nmos(idx, on), f"NMOS{idx}", on)
+
+    def set_motor_bypass(self, on: bool) -> None:
+        self._send_output(cmd_set_motor_bypass(on), "MOTOR_BYPASS", on)
+
+    def set_charge_bypass(self, on: bool) -> None:
+        self._send_output(cmd_set_charge_bypass(on), "CHARGE_BYPASS", on)
 
     def set_charge_mode(self, mode: str) -> None:
         """Serialize mutually exclusive charge-path changes."""
@@ -314,6 +325,8 @@ class Controller(QObject):
 
     def _run_all_outputs_off(self) -> None:
         steps = (
+            (cmd_set_motor_bypass(False), "MOTOR_BYPASS"),
+            (cmd_set_charge_bypass(False), "CHARGE_BYPASS"),
             (cmd_power_off(), "POWER"),
             (cmd_set_nmos(1, False), "NMOS1"),
             (cmd_set_nmos(2, False), "NMOS2"),
@@ -543,6 +556,8 @@ class Controller(QObject):
         self._latest_motor = None
         self._confirmed_motor_mode = None
         self._latest_fault = None
+        self._latest_output = None
+        self._confirmed_power_mode = "off"
         self._pending_outputs.clear()
         self._pending_bridges.clear()
         charge_was_active = self._charge_transition_active
@@ -585,6 +600,7 @@ class Controller(QObject):
             return
 
         pending = self._pending_outputs.get(cmd)
+        completed_output_command = bool(pending)
         if pending:
             control, requested_state, on_success, on_failure = pending.popleft()
             if not pending:
@@ -601,6 +617,16 @@ class Controller(QObject):
             elif on_success is not None:
                 on_success()
 
+        if (
+            completed_output_command
+            and resp.error is None
+            and not self._charge_transition_active
+        ):
+            try:
+                self._worker.send_command(cmd_query_output())
+            except SerialError as error:
+                self._on_worker_error(f"输出状态确认失败: {error}")
+
         bridge_pending = self._pending_bridges.get(cmd)
         if bridge_pending:
             on_success, on_failure = bridge_pending.popleft()
@@ -611,13 +637,6 @@ class Controller(QObject):
             else:
                 on_success()
         stripped_cmd = cmd.strip()
-        if resp.error is None:
-            if stripped_cmd in {"AT+CHARGE=OFF", "AT+DRIVE=OFF", "AT+POWER=OFF"}:
-                self._confirmed_power_mode = "off"
-            elif stripped_cmd == "AT+CHARGE=ON":
-                self._confirmed_power_mode = "charge"
-            elif stripped_cmd == "AT+DRIVE=ON":
-                self._confirmed_power_mode = "drive"
 
         # 握手响应特殊处理
         if stripped_cmd.startswith("AT+MOTOR="):
@@ -647,6 +666,9 @@ class Controller(QObject):
             self._confirmed_motor_mode = resp.motor.mode
         if resp.fault is not None:
             self._latest_fault = resp.fault
+        if resp.output is not None:
+            self._latest_output = resp.output
+            self._confirmed_power_mode = resp.output.power.lower()
 
     # ---- 握手 ----
     def _start_handshake(self) -> None:
@@ -739,6 +761,7 @@ class Controller(QObject):
             "sense": self._latest_sense,
             "motor": self._latest_motor,
             "fault": self._latest_fault,
+            "output": self._latest_output,
         }
 
     def get_data_buffer(self) -> DataBuffer:

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from ..at_protocol import cmd_query_diag, cmd_query_sense
 from ..branding import APP_DISPLAY_NAME, load_app_icon
 from ..controller import Controller
+from ..models import OutputState
 from . import native_chrome
 from .stylesheet import apply_to
 from .tab1_console import ConsoleTab
@@ -34,6 +35,7 @@ AUX_TOGGLE_MAP = {
     "NMOS1": "nmos1",
     "NMOS2": "nmos2",
     "LIGHTS": "light",
+    "CHARGE_BYPASS": "charge_bypass",
 }
 
 
@@ -109,6 +111,9 @@ class MainWindow(QMainWindow):
         self.serial_bar.close_requested.connect(self._on_close_serial)
         self.serial_bar.refresh_requested.connect(self.serial_bar.refresh_ports)
         self.console_tab.motor_cmd.connect(self._controller.set_motor)
+        self.console_tab.motor_card.bypass_changed.connect(
+            self._controller.set_motor_bypass
+        )
         self.console_tab.toggle_changed.connect(self._on_toggle_changed)
         self.console_tab.charge_card.all_off_clicked.connect(
             self._on_all_outputs_off
@@ -301,8 +306,24 @@ class MainWindow(QMainWindow):
             and not self._passthrough_transition_active
         )
         self.console_tab.motor_card.set_enabled(standard_enabled)
-        self.console_tab.charge_card.set_enabled(
-            standard_enabled and not self._charge_transition_active
+        output_controls_enabled = standard_enabled and not self._charge_transition_active
+        charge_card = self.console_tab.charge_card
+        charge_card.set_enabled(output_controls_enabled)
+        latest = self._controller.get_latest()
+        output = latest["output"]
+        if output_controls_enabled:
+            charge_card.set_control_enabled(
+                "CHARGE_BYPASS",
+                output is not None and output.power == "CHARGE",
+            )
+            drive_children_enabled = output is not None and output.power == "DRIVE"
+            for name in ("NMOS1", "NMOS2", "LIGHTS"):
+                charge_card.set_control_enabled(name, drive_children_enabled)
+        motor = latest["motor"]
+        self.console_tab.motor_card.set_bypass_enabled(
+            standard_enabled
+            and motor is not None
+            and motor.mode in {"FWD", "REV"}
         )
         self.console_tab.at_console.input_edit.setEnabled(standard_enabled)
         self.console_tab.at_console.send_btn.setEnabled(standard_enabled)
@@ -348,25 +369,10 @@ class MainWindow(QMainWindow):
         requested_state: bool,
         reason: str,
     ) -> None:
-        if control in {"CHARGE", "DRIVE", "POWER"}:
-            confirmed_mode = self._controller.confirmed_power_mode
-            self.console_tab.charge_card.set_toggle(
-                "CHARGE",
-                confirmed_mode == "charge",
-                animate=False,
-            )
-            self.console_tab.charge_card.set_toggle(
-                "DRIVE",
-                confirmed_mode == "drive",
-                animate=False,
-            )
-            return
-
-        self.console_tab.charge_card.set_toggle(
-            control,
-            not requested_state,
-            animate=False,
+        self._apply_confirmed_output_state(
+            self._controller.get_latest()["output"]
         )
+        self._refresh_control_gates()
 
     def _on_motor_command_failed(
         self,
@@ -412,6 +418,8 @@ class MainWindow(QMainWindow):
                 self._controller.set_nmos(2, on)
             elif tag == "light":
                 self._controller.set_led(on)
+            elif tag == "charge_bypass":
+                self._controller.set_charge_bypass(on)
         else:
             self._on_worker_error(f"Unknown toggle: {name}")
 
@@ -431,6 +439,7 @@ class MainWindow(QMainWindow):
         self.console_tab.battery_card.update_from_sense(None)
         self.console_tab.temp_grid.update_from_sense(None)
         self.console_tab.motor_card.update_state(None, None, 0, 0)
+        self.console_tab.motor_card.set_bypass_state(False)
         self.console_tab.charge_card.clear_all()
         self._apply_handshake_gate(connected=False)
 
@@ -493,8 +502,29 @@ class MainWindow(QMainWindow):
             self.console_tab.charge_card.update_fault(
                 drv=latest["fault"].drv, aux=latest["fault"].aux
             )
+        if latest["output"] is not None:
+            self._apply_confirmed_output_state(latest["output"])
+        self._refresh_control_gates()
         self._refresh_derived_faults(latest["sense"], latest["motor"])
         self.plot_tab.plot_widget.update_from_buffer()
+
+    def _apply_confirmed_output_state(self, output: OutputState | None) -> None:
+        if output is None:
+            self.console_tab.charge_card.clear_controls()
+            self.console_tab.motor_card.set_bypass_state(False)
+            return
+        card = self.console_tab.charge_card
+        confirmed = {
+            "CHARGE": output.power == "CHARGE",
+            "DRIVE": output.power == "DRIVE",
+            "NMOS1": output.nmos1,
+            "NMOS2": output.nmos2,
+            "LIGHTS": output.lights,
+            "CHARGE_BYPASS": output.charge_bypass,
+        }
+        for name, on in confirmed.items():
+            card.set_toggle(name, on, animate=False)
+        self.console_tab.motor_card.set_bypass_state(output.motor_bypass)
 
     def _refresh_derived_faults(self, sense, motor) -> None:
         fault_updates: dict[str, bool] = {}
