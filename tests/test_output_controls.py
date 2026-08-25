@@ -99,6 +99,10 @@ def test_output_controls_follow_approved_hierarchy(
     assert abs(centers["NMOS2"].y() - centers["LIGHTS"].y()) <= 2
     assert abs(centers["DRIVE"].x() - centers["NMOS2"].x()) <= 2
     assert output_card._cells["CHARGE_BYPASS"].label.text() == "CHARGE BYPASS"
+    assert (
+        output_card._cells["CHARGE_BYPASS"].label.font().pointSize()
+        == output_card._cells["CHARGE"].label.font().pointSize()
+    )
 
 
 def test_output_switches_and_labels_are_fully_contained(
@@ -124,7 +128,7 @@ def test_motor_status_bands_use_equal_vertical_spacing(
     qapp: QApplication,
 ) -> None:
     card = MotorCard()
-    card.setFixedSize(640, 430)
+    card.setFixedSize(710, 511)
     card.show()
     qapp.processEvents()
 
@@ -135,7 +139,10 @@ def test_motor_status_bands_use_equal_vertical_spacing(
     ).y()
     divider_top = card.divider.mapTo(card, card.divider.rect().topLeft()).y()
 
-    assert abs((current_top - mode_bottom) - (divider_top - current_bottom)) <= 2
+    mode_to_status = current_top - mode_bottom
+    status_to_divider = divider_top - current_bottom
+    assert abs(mode_to_status - status_to_divider) <= 2
+    assert 14 <= mode_to_status <= 16
 
     card.close()
     card.deleteLater()
