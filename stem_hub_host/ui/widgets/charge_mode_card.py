@@ -38,8 +38,10 @@ class _ToggleCell(QWidget):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         f = QFont(theme.FONT_MONO.split(",")[0].strip())
-        self.letter_spacing = 0.5 if len(name) > 10 else 1.5
-        f.setPointSize(7 if len(name) > 10 else 10)
+        self.letter_spacing = 0.0 if len(name) > 10 else 1.5
+        f.setPointSize(
+            theme.OUTPUT_LONG_LABEL_FONT_SIZE if len(name) > 10 else 10
+        )
         f.setBold(True)
         self.label.setFont(f)
         self.label.setStyleSheet(

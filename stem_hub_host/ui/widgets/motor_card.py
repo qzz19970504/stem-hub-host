@@ -554,9 +554,9 @@ class MotorCard(QFrame):
         upper_layout = QVBoxLayout(self.upper_region)
         upper_layout.setContentsMargins(
             0,
-            theme.CARD_UPPER_MIN_GAP,
+            theme.MOTOR_STATUS_GAP,
             0,
-            theme.CARD_UPPER_MIN_GAP,
+            theme.MOTOR_STATUS_GAP,
         )
         upper_layout.setSpacing(0)
 
@@ -567,7 +567,7 @@ class MotorCard(QFrame):
         )
         content_layout = QVBoxLayout(self.upper_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(theme.LAYOUT_GAP_CONTROL)
+        content_layout.setSpacing(theme.MOTOR_STATUS_GAP)
 
         self.mode_badge = _ModeBadge(self)
         content_layout.addWidget(self.mode_badge)
@@ -586,10 +586,20 @@ class MotorCard(QFrame):
         outer.addWidget(self.divider)
         outer.addSpacing(theme.LAYOUT_GAP_CONTROL)
 
-        row = QHBoxLayout()
+        self.button_region = QWidget(self)
+        self.button_region.setObjectName("motorButtonRegion")
+        self.button_region.setStyleSheet(
+            "QWidget#motorButtonRegion { background: transparent; }"
+        )
+        self.button_region.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        row = QHBoxLayout(self.button_region)
         row.setSpacing(theme.LAYOUT_GAP_CONTROL)
         row.setContentsMargins(0, 0, 0, 0)
-        outer.addLayout(row, 1)
+        row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self.button_region, 1)
 
         self._btns: dict[str, _ModeButton] = {}
         surface_groups = {
