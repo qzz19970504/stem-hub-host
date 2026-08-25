@@ -208,6 +208,28 @@ def test_motor_and_output_dividers_share_vertical_position(
 
 
 @pytest.mark.parametrize("card_type", [MotorCard, ChargeModeCard])
+@pytest.mark.parametrize("card_height", [418, 511])
+def test_card_lower_region_stays_below_one_third(
+    qapp: QApplication,
+    card_type,
+    card_height: int,
+) -> None:
+    card = card_type()
+    card.resize(710, card_height)
+    card.show()
+    qapp.processEvents()
+
+    divider_ratio = card.divider.y() / card.height()
+    lower_height = card.height() - card.divider.y() - card.divider.height()
+
+    assert 0.67 <= divider_ratio <= 0.71
+    assert lower_height / card.height() < 1 / 3
+
+    card.deleteLater()
+    qapp.processEvents()
+
+
+@pytest.mark.parametrize("card_type", [MotorCard, ChargeModeCard])
 def test_card_upper_content_is_vertically_centered(
     qapp: QApplication,
     card_type,
