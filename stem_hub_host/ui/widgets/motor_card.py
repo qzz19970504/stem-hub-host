@@ -162,7 +162,11 @@ class _ModeBadge(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._mode: str | None = None
-        self.setFixedHeight(130)
+        self.setMinimumHeight(130)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         self._apply_surface(theme.BORDER, active=False)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(28, 8, 28, 8)
@@ -253,7 +257,11 @@ class _CurrentBadge(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._ma: int | None = None
-        self.setFixedHeight(72)
+        self.setMinimumHeight(72)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         self._apply_surface()
         lay = QHBoxLayout(self)
         lay.setContentsMargins(24, 4, 20, 4)
@@ -550,7 +558,11 @@ class MotorCard(QFrame):
         self.upper_region.setStyleSheet(
             f"background-color: {theme.BG_CARD};"
         )
-        self.upper_region.setFixedHeight(theme.MOTOR_UPPER_REGION_HEIGHT)
+        self.upper_region.setMinimumHeight(theme.CARD_UPPER_REGION_MIN_HEIGHT)
+        self.upper_region.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         upper_layout = QVBoxLayout(self.upper_region)
         upper_layout.setContentsMargins(
             0,
@@ -563,29 +575,27 @@ class MotorCard(QFrame):
         self.upper_content = QWidget(self.upper_region)
         self.upper_content.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
         )
         content_layout = QVBoxLayout(self.upper_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(theme.MOTOR_STATUS_GAP)
 
         self.mode_badge = _ModeBadge(self)
-        content_layout.addWidget(self.mode_badge)
+        content_layout.addWidget(self.mode_badge, 2)
 
         self.current_badge = _CurrentBadge(self)
         self.bypass_toggle = self.current_badge.bypass_toggle
         self.bypass_toggle.toggled.connect(self.bypass_changed)
-        content_layout.addWidget(self.current_badge)
+        content_layout.addWidget(self.current_badge, 1)
 
         upper_layout.addWidget(self.upper_content)
-        outer.addWidget(self.upper_region)
+        outer.addWidget(self.upper_region, theme.CARD_UPPER_REGION_STRETCH)
 
         self.divider = QFrame(self)
         self.divider.setObjectName("divider")
         self.divider.setFixedHeight(theme.DIVIDER_HEIGHT)
         outer.addWidget(self.divider)
-        outer.addSpacing(theme.LAYOUT_GAP_CONTROL)
-
         self.button_region = QWidget(self)
         self.button_region.setObjectName("motorButtonRegion")
         self.button_region.setStyleSheet(
@@ -595,11 +605,12 @@ class MotorCard(QFrame):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
+        self.button_region.setMinimumHeight(theme.CARD_LOWER_REGION_MIN_HEIGHT)
         row = QHBoxLayout(self.button_region)
         row.setSpacing(theme.LAYOUT_GAP_CONTROL)
         row.setContentsMargins(0, 0, 0, 0)
         row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.addWidget(self.button_region, 1)
+        outer.addWidget(self.button_region, theme.CARD_LOWER_REGION_STRETCH)
 
         self._btns: dict[str, _ModeButton] = {}
         surface_groups = {

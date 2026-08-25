@@ -57,6 +57,10 @@ class _OutputHierarchy(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.cells: dict[str, _ToggleCell] = {}
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
@@ -124,13 +128,17 @@ class ChargeModeCard(QFrame):
             theme.LAYOUT_MARGIN_CARD,
             theme.LAYOUT_MARGIN_CARD_Y,
         )
-        outer.setSpacing(theme.LAYOUT_GAP_CONTROL)
+        outer.setSpacing(0)
 
         self.upper_region = QWidget(self)
         self.upper_region.setStyleSheet(
             f"background-color: {theme.BG_CARD};"
         )
-        self.upper_region.setFixedHeight(theme.OUTPUT_UPPER_REGION_HEIGHT)
+        self.upper_region.setMinimumHeight(theme.CARD_UPPER_REGION_MIN_HEIGHT)
+        self.upper_region.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         upper_layout = QVBoxLayout(self.upper_region)
         upper_layout.setContentsMargins(
             0,
@@ -139,12 +147,10 @@ class ChargeModeCard(QFrame):
             theme.CARD_UPPER_MIN_GAP,
         )
         upper_layout.setSpacing(0)
-        upper_layout.addStretch(1)
-
         self.upper_content = QWidget(self.upper_region)
         self.upper_content.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
         )
         content_layout = QVBoxLayout(self.upper_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -195,14 +201,24 @@ class ChargeModeCard(QFrame):
         content_layout.addWidget(self.output_hierarchy)
 
         upper_layout.addWidget(self.upper_content)
-        upper_layout.addStretch(1)
-        outer.addWidget(self.upper_region)
+        outer.addWidget(self.upper_region, theme.CARD_UPPER_REGION_STRETCH)
 
         # 下划线 (分隔 toggle 区与故障区)
         self.divider = _make_divider()
         outer.addWidget(self.divider)
 
-        fault_grid = QGridLayout()
+        self.fault_region = QWidget(self)
+        self.fault_region.setObjectName("faultRegion")
+        self.fault_region.setStyleSheet(
+            "QWidget#faultRegion { background: transparent; }"
+        )
+        self.fault_region.setMinimumHeight(theme.CARD_LOWER_REGION_MIN_HEIGHT)
+        self.fault_region.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        fault_grid = QGridLayout(self.fault_region)
+        fault_grid.setContentsMargins(0, 0, 0, 0)
         fault_grid.setHorizontalSpacing(8)
         fault_grid.setVerticalSpacing(8)
         self.fault_overtemp = FaultIndicator("OVERTEMP")
@@ -219,7 +235,7 @@ class ChargeModeCard(QFrame):
         fault_grid.setRowStretch(0, 1)
         fault_grid.setRowStretch(1, 1)
 
-        outer.addLayout(fault_grid, 1)
+        outer.addWidget(self.fault_region, theme.CARD_LOWER_REGION_STRETCH)
 
     def _make_toggle_cell(self, name: str, label: str | None = None) -> _ToggleCell:
         cell = _ToggleCell(label or name, self)
