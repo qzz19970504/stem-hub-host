@@ -105,6 +105,20 @@ def test_output_controls_follow_approved_hierarchy(
     )
 
 
+def test_output_upper_region_gives_drive_twice_the_charge_height(
+    output_card: ChargeModeCard,
+    qapp: QApplication,
+) -> None:
+    output_card.setFixedSize(710, 511)
+    output_card.show()
+    qapp.processEvents()
+
+    assert hasattr(output_card, "charge_region")
+    assert hasattr(output_card, "drive_region")
+    ratio = output_card.drive_region.height() / output_card.charge_region.height()
+    assert 1.95 <= ratio <= 2.05
+
+
 def test_output_switches_and_labels_are_fully_contained(
     output_card: ChargeModeCard,
     qapp: QApplication,
@@ -207,6 +221,33 @@ def test_fault_rows_use_the_lower_card_area_without_dead_space(
     )
 
     assert output_card.height() - fault_bottom <= 55
+
+
+def test_fault_rows_have_three_equal_vertical_gaps(
+    output_card: ChargeModeCard,
+    qapp: QApplication,
+) -> None:
+    output_card.setFixedSize(710, 511)
+    output_card.show()
+    qapp.processEvents()
+
+    first_row = (
+        output_card.fault_overtemp,
+        output_card.fault_overcurrent,
+        output_card.fault_undervoltage,
+    )
+    second_row = (output_card.fault_drv, output_card.fault_aux)
+    first_top = min(widget.geometry().top() for widget in first_row)
+    first_bottom = max(widget.geometry().bottom() for widget in first_row)
+    second_top = min(widget.geometry().top() for widget in second_row)
+    second_bottom = max(widget.geometry().bottom() for widget in second_row)
+    gaps = (
+        first_top,
+        second_top - first_bottom - 1,
+        output_card.fault_region.height() - second_bottom - 1,
+    )
+
+    assert max(gaps) - min(gaps) <= 2
 
 
 def test_charge_and_drive_are_mutually_exclusive(
