@@ -63,6 +63,32 @@ class _OutputHierarchy(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
+        regions = QVBoxLayout(self)
+        regions.setContentsMargins(0, 0, 0, 0)
+        regions.setSpacing(0)
+
+        self.charge_region = QWidget(self)
+        self.charge_region.setObjectName("chargeRegion")
+        self.charge_region.setStyleSheet(
+            "QWidget#chargeRegion { background: transparent; }"
+        )
+        self.charge_region.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        regions.addWidget(self.charge_region, 1)
+
+        self.drive_region = QWidget(self)
+        self.drive_region.setObjectName("driveRegion")
+        self.drive_region.setStyleSheet(
+            "QWidget#driveRegion { background: transparent; }"
+        )
+        self.drive_region.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        regions.addWidget(self.drive_region, 2)
+
     def paintEvent(self, event) -> None:  # type: ignore[override]
         super().paintEvent(event)
         required = {"CHARGE", "CHARGE_BYPASS", "DRIVE", "NMOS1", "NMOS2", "LIGHTS"}
@@ -160,12 +186,15 @@ class ChargeModeCard(QFrame):
         self.output_hierarchy = _OutputHierarchy(self.upper_content)
         self.output_hierarchy.setObjectName("driveHierarchy")
         self.drive_hierarchy = self.output_hierarchy
-        hierarchy_grid = QGridLayout(self.output_hierarchy)
-        hierarchy_grid.setContentsMargins(0, 0, 0, 0)
-        hierarchy_grid.setHorizontalSpacing(0)
-        hierarchy_grid.setVerticalSpacing(theme.OUTPUT_HIERARCHY_GAP)
+        self.charge_region = self.output_hierarchy.charge_region
+        self.drive_region = self.output_hierarchy.drive_region
+
+        charge_grid = QGridLayout(self.charge_region)
+        charge_grid.setContentsMargins(0, 0, 0, 0)
+        charge_grid.setHorizontalSpacing(0)
+        charge_grid.setVerticalSpacing(0)
         for column in range(5):
-            hierarchy_grid.setColumnStretch(column, 1)
+            charge_grid.setColumnStretch(column, 1)
 
         charge = self._make_toggle_cell("CHARGE")
         charge_bypass = self._make_toggle_cell("CHARGE_BYPASS", "CHARGE BYPASS")
@@ -173,12 +202,19 @@ class ChargeModeCard(QFrame):
         nmos1 = self._make_toggle_cell("NMOS1")
         nmos2 = self._make_toggle_cell("NMOS2")
         lights = self._make_toggle_cell("LIGHTS")
-        hierarchy_grid.addWidget(charge, 0, 0)
-        hierarchy_grid.addWidget(charge_bypass, 0, 4)
-        hierarchy_grid.addWidget(drive, 1, 2)
-        hierarchy_grid.addWidget(nmos1, 2, 0)
-        hierarchy_grid.addWidget(nmos2, 2, 2)
-        hierarchy_grid.addWidget(lights, 2, 4)
+        charge_grid.addWidget(charge, 0, 0)
+        charge_grid.addWidget(charge_bypass, 0, 4)
+
+        drive_grid = QGridLayout(self.drive_region)
+        drive_grid.setContentsMargins(0, 0, 0, 0)
+        drive_grid.setHorizontalSpacing(0)
+        drive_grid.setVerticalSpacing(theme.OUTPUT_HIERARCHY_GAP)
+        for column in range(5):
+            drive_grid.setColumnStretch(column, 1)
+        drive_grid.addWidget(drive, 0, 2)
+        drive_grid.addWidget(nmos1, 1, 0)
+        drive_grid.addWidget(nmos2, 1, 2)
+        drive_grid.addWidget(lights, 1, 4)
         self.output_hierarchy.cells = self._cells
 
         self.all_off_row = QFrame(self)
@@ -197,7 +233,7 @@ class ChargeModeCard(QFrame):
         self.all_off_button.clicked.connect(self.all_off_clicked)
         all_off_layout.addWidget(self.all_off_button)
         all_off_layout.addStretch(1)
-        hierarchy_grid.addWidget(self.all_off_row, 3, 1, 1, 3)
+        drive_grid.addWidget(self.all_off_row, 2, 1, 1, 3)
         content_layout.addWidget(self.output_hierarchy)
 
         upper_layout.addWidget(self.upper_content)
@@ -220,20 +256,20 @@ class ChargeModeCard(QFrame):
         fault_grid = QGridLayout(self.fault_region)
         fault_grid.setContentsMargins(0, 0, 0, 0)
         fault_grid.setHorizontalSpacing(8)
-        fault_grid.setVerticalSpacing(8)
+        fault_grid.setVerticalSpacing(0)
         self.fault_overtemp = FaultIndicator("OVERTEMP")
         self.fault_overcurrent = FaultIndicator("OVERCURRENT")
         self.fault_undervoltage = FaultIndicator("UNDERVOLTAGE")
         self.fault_drv = FaultIndicator("DRV FAULT")
         self.fault_aux = FaultIndicator("AUX FAULT")
 
-        fault_grid.addWidget(self.fault_overtemp, 0, 0)
-        fault_grid.addWidget(self.fault_overcurrent, 0, 1)
-        fault_grid.addWidget(self.fault_undervoltage, 0, 2)
-        fault_grid.addWidget(self.fault_drv, 1, 0)
-        fault_grid.addWidget(self.fault_aux, 1, 1)
-        fault_grid.setRowStretch(0, 1)
-        fault_grid.setRowStretch(1, 1)
+        fault_grid.addWidget(self.fault_overtemp, 1, 0)
+        fault_grid.addWidget(self.fault_overcurrent, 1, 1)
+        fault_grid.addWidget(self.fault_undervoltage, 1, 2)
+        fault_grid.addWidget(self.fault_drv, 3, 0)
+        fault_grid.addWidget(self.fault_aux, 3, 1)
+        for spacer_row in (0, 2, 4):
+            fault_grid.setRowStretch(spacer_row, 1)
 
         outer.addWidget(self.fault_region, theme.CARD_LOWER_REGION_STRETCH)
 

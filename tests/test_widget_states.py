@@ -76,10 +76,24 @@ def test_motor_status_surface_combines_current_and_bypass(
     qapp.processEvents()
 
     assert "border-radius: 14px" in card.current_badge.styleSheet()
-    assert card.bypass_toggle.parent() is card.current_badge
+    assert card.bypass_toggle.parent() is card.current_badge.bypass_region
     assert card.current_badge._label.geometry().center().x() < (
         card.bypass_toggle.mapTo(card.current_badge, card.bypass_toggle.rect().center()).x()
     )
+    bypass_center = card.bypass_toggle.mapTo(
+        card.current_badge,
+        card.bypass_toggle.rect().center(),
+    ).x()
+    expected_center = card.current_badge.width() * 5 / 6
+    region_center = card.current_badge.bypass_region.geometry().center().x()
+    label_center = card.current_badge.bypass_label.mapTo(
+        card.current_badge,
+        card.current_badge.bypass_label.rect().center(),
+    ).x()
+
+    assert abs(bypass_center - expected_center) <= 3
+    assert abs(bypass_center - region_center) <= 1
+    assert abs(label_center - bypass_center) <= 2
 
     card.deleteLater()
     qapp.processEvents()

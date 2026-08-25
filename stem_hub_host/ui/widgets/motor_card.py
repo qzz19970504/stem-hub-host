@@ -264,8 +264,17 @@ class _CurrentBadge(QFrame):
         )
         self._apply_surface()
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(24, 4, 20, 4)
-        lay.setSpacing(10)
+        lay.setContentsMargins(0, 4, 0, 4)
+        lay.setSpacing(0)
+
+        self.current_region = QWidget(self)
+        self.current_region.setObjectName("currentReadoutRegion")
+        self.current_region.setStyleSheet(
+            "QWidget#currentReadoutRegion { background: transparent; border: none; }"
+        )
+        current_row = QHBoxLayout(self.current_region)
+        current_row.setContentsMargins(24, 0, 10, 0)
+        current_row.setSpacing(10)
 
         self._label = QLabel("CURRENT:")
         f_lbl = QFont(theme.FONT_DISPLAY)
@@ -275,7 +284,7 @@ class _CurrentBadge(QFrame):
         self._label.setStyleSheet(
             f"color: {theme.FG_SECONDARY}; background: transparent;"
         )
-        lay.addWidget(self._label)
+        current_row.addWidget(self._label)
 
         self._value = QLabel("--.- A")
         f_val = QFont(theme.FONT_MONO)
@@ -285,11 +294,20 @@ class _CurrentBadge(QFrame):
         self._value.setStyleSheet(
             f"color: {theme.FG_PRIMARY}; background: transparent;"
         )
-        lay.addWidget(self._value)
+        current_row.addWidget(self._value)
 
-        lay.addStretch(1)
+        current_row.addStretch(1)
 
-        bypass_column = QVBoxLayout()
+        lay.addWidget(self.current_region, 2)
+
+        self.bypass_region = QWidget(self)
+        self.bypass_region.setObjectName("motorBypassRegion")
+        self.bypass_region.setStyleSheet(
+            "QWidget#motorBypassRegion { background: transparent; border: none; }"
+        )
+
+        bypass_column = QVBoxLayout(self.bypass_region)
+        bypass_column.setContentsMargins(0, 0, 0, 0)
         bypass_column.setSpacing(2)
         self.bypass_toggle = ToggleSwitch(self)
         bypass_column.addWidget(
@@ -302,7 +320,7 @@ class _CurrentBadge(QFrame):
         self.bypass_label.setFont(bypass_font)
         self.bypass_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bypass_column.addWidget(self.bypass_label)
-        lay.addLayout(bypass_column)
+        lay.addWidget(self.bypass_region, 1)
 
     def _apply_surface(self) -> None:
         self.setStyleSheet(
