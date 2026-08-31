@@ -5,7 +5,6 @@ from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -63,31 +62,25 @@ class _OutputHierarchy(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        regions = QVBoxLayout(self)
-        regions.setContentsMargins(0, 0, 0, 0)
-        regions.setSpacing(0)
+        # 方向二: 布局由 ChargeModeCard 组装 (双主开关列 + 页脚),
+        # 本控件只保留透明画布与连线绘制.
+        self.regions_layout = QVBoxLayout(self)
+        self.regions_layout.setContentsMargins(0, 0, 0, 0)
+        self.regions_layout.setSpacing(theme.SP_XS)
 
         self.charge_region = QWidget(self)
         self.charge_region.setObjectName("chargeRegion")
-        self.charge_region.setStyleSheet(
-            "QWidget#chargeRegion { background: transparent; }"
-        )
         self.charge_region.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
-        regions.addWidget(self.charge_region, 1)
 
         self.drive_region = QWidget(self)
         self.drive_region.setObjectName("driveRegion")
-        self.drive_region.setStyleSheet(
-            "QWidget#driveRegion { background: transparent; }"
-        )
         self.drive_region.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
-        regions.addWidget(self.drive_region, 2)
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -104,12 +97,12 @@ class _OutputHierarchy(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(theme.BORDER_LIGHT), 1.2))
 
+        # CHARGE → CHARGE BYPASS: 同列纵向父子连线
         charge = center("CHARGE")
         charge_bypass = center("CHARGE_BYPASS")
-        track_half = theme.SWITCH_WIDTH / 2
         painter.drawLine(
-            QPointF(charge.x() + track_half + theme.SP_XS, charge.y()),
-            QPointF(charge_bypass.x() - track_half - theme.SP_XS, charge_bypass.y()),
+            QPointF(charge.x(), charge.y() + theme.SWITCH_HEIGHT / 2 + 2),
+            QPointF(charge_bypass.x(), charge_bypass.y() - theme.SWITCH_HEIGHT / 2 - 2),
         )
 
         drive = center("DRIVE")
@@ -189,12 +182,32 @@ class ChargeModeCard(QFrame):
         self.charge_region = self.output_hierarchy.charge_region
         self.drive_region = self.output_hierarchy.drive_region
 
-        charge_grid = QGridLayout(self.charge_region)
-        charge_grid.setContentsMargins(0, 0, 0, 0)
-        charge_grid.setHorizontalSpacing(0)
-        charge_grid.setVerticalSpacing(0)
-        for column in range(5):
-            charge_grid.setColumnStretch(column, 1)
+        # ---- 方向二: 双主开关列 (子开关归入父列, 消除横向真空) ----
+        column_style = (
+            "background: {bg}; border: 1px solid {border}; border-radius: 12px;"
+        ).format(bg=theme.BG_SUB_CARD, border=theme.BORDER)
+
+        self.charge_column = self.charge_region
+        self.charge_column.setObjectName("chargeColumn")
+        self.charge_column.setStyleSheet(
+            f"QWidget#chargeColumn {{ {column_style} }}"
+        )
+        charge_col_layout = QVBoxLayout(self.charge_column)
+        charge_col_layout.setContentsMargins(
+            theme.SP_SM, theme.SP_SM, theme.SP_SM, theme.SP_SM
+        )
+        charge_col_layout.setSpacing(theme.SP_XS)
+
+        self.drive_column = self.drive_region
+        self.drive_column.setObjectName("driveColumn")
+        self.drive_column.setStyleSheet(
+            f"QWidget#driveColumn {{ {column_style} }}"
+        )
+        drive_col_layout = QVBoxLayout(self.drive_column)
+        drive_col_layout.setContentsMargins(
+            theme.SP_SM, theme.SP_SM, theme.SP_SM, theme.SP_SM
+        )
+        drive_col_layout.setSpacing(theme.SP_XS)
 
         charge = self._make_toggle_cell("CHARGE")
         charge_bypass = self._make_toggle_cell("CHARGE_BYPASS", "CHARGE BYPASS")
@@ -202,47 +215,59 @@ class ChargeModeCard(QFrame):
         nmos1 = self._make_toggle_cell("NMOS1")
         nmos2 = self._make_toggle_cell("NMOS2")
         lights = self._make_toggle_cell("LIGHTS")
-        charge_grid.addWidget(charge, 0, 0)
-        charge_grid.addWidget(charge_bypass, 0, 4)
+        # 子开关列宽收窄, 让三枚能并排进入 DRIVE 列
+        for child in (nmos1, nmos2, lights):
+            child.setMinimumWidth(theme.SWITCH_WIDTH + 8)
 
-        drive_grid = QGridLayout(self.drive_region)
-        drive_grid.setContentsMargins(0, 0, 0, 0)
-        drive_grid.setHorizontalSpacing(0)
-        drive_grid.setVerticalSpacing(theme.OUTPUT_HIERARCHY_GAP)
-        for column in range(5):
-            drive_grid.setColumnStretch(column, 1)
-        drive_grid.addWidget(drive, 0, 2)
-        drive_grid.addWidget(nmos1, 1, 0)
-        drive_grid.addWidget(nmos2, 1, 2)
-        drive_grid.addWidget(lights, 1, 4)
+        charge_col_layout.addWidget(charge, 1, Qt.AlignmentFlag.AlignHCenter)
+        charge_col_layout.addWidget(charge_bypass, 1, Qt.AlignmentFlag.AlignHCenter)
+
+        drive_col_layout.addWidget(drive, 1, Qt.AlignmentFlag.AlignHCenter)
+        drive_children_row = QHBoxLayout()
+        drive_children_row.setSpacing(theme.SP_XS)
+        for child in (nmos1, nmos2, lights):
+            drive_children_row.addWidget(child, 1, Qt.AlignmentFlag.AlignHCenter)
+        drive_col_layout.addLayout(drive_children_row, 1)
+
         self.output_hierarchy.cells = self._cells
+        columns_row = QHBoxLayout()
+        columns_row.setSpacing(theme.SP_SM)
+        # DRIVE 列需要容纳三枚子开关, 取更宽的 stretch
+        columns_row.addWidget(self.charge_column, 2)
+        columns_row.addWidget(self.drive_column, 3)
 
-        self.all_off_row = QFrame(self)
+        # ---- ALL OFF 页脚: 整行落地, 不再悬在层级中间 ----
+        self.all_off_row = QFrame(self.output_hierarchy)
         self.all_off_row.setObjectName("allOffRow")
         all_off_layout = QHBoxLayout(self.all_off_row)
         all_off_layout.setContentsMargins(0, 0, 0, 0)
-        all_off_layout.addStretch(1)
         self.all_off_button = QPushButton("ALL OFF")
         self.all_off_button.setObjectName("allOffButton")
         self.all_off_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.all_off_button.setFixedSize(112, theme.CONTROL_HEIGHT_SM)
+        self.all_off_button.setMinimumHeight(theme.CONTROL_HEIGHT_SM)
+        self.all_off_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         all_off_font = QFont(theme.FONT_DISPLAY)
         all_off_font.setPointSize(11)
         all_off_font.setBold(True)
         self.all_off_button.setFont(all_off_font)
         self.all_off_button.clicked.connect(self.all_off_clicked)
         all_off_layout.addWidget(self.all_off_button)
-        all_off_layout.addStretch(1)
-        drive_grid.addWidget(self.all_off_row, 2, 1, 1, 3)
+
+        self.output_hierarchy.regions_layout.addLayout(columns_row, 1)
+        self.output_hierarchy.regions_layout.addWidget(self.all_off_row)
         content_layout.addWidget(self.output_hierarchy)
 
         upper_layout.addWidget(self.upper_content)
         outer.addWidget(self.upper_region, theme.CARD_UPPER_REGION_STRETCH)
 
-        # 下划线 (分隔 toggle 区与故障区)
+        # 下划线 (分隔控制区与故障区)
         self.divider = _make_divider()
         outer.addWidget(self.divider)
 
+        # ---- 故障灯: 紧凑 3+2 两行块, 垂直居中 (无拉伸空行), 与左卡下区同节奏 ----
         self.fault_region = QWidget(self)
         self.fault_region.setObjectName("faultRegion")
         self.fault_region.setStyleSheet(
@@ -253,23 +278,31 @@ class ChargeModeCard(QFrame):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
-        fault_grid = QGridLayout(self.fault_region)
-        fault_grid.setContentsMargins(0, 0, 0, 0)
-        fault_grid.setHorizontalSpacing(8)
-        fault_grid.setVerticalSpacing(0)
+        fault_outer = QVBoxLayout(self.fault_region)
+        fault_outer.setContentsMargins(0, 0, 0, 0)
+        fault_outer.setSpacing(theme.SP_XS)
         self.fault_overtemp = FaultIndicator("OVERTEMP")
         self.fault_overcurrent = FaultIndicator("OVERCURRENT")
         self.fault_undervoltage = FaultIndicator("UNDERVOLTAGE")
         self.fault_drv = FaultIndicator("DRV FAULT")
         self.fault_aux = FaultIndicator("AUX FAULT")
-
-        fault_grid.addWidget(self.fault_overtemp, 1, 0)
-        fault_grid.addWidget(self.fault_overcurrent, 1, 1)
-        fault_grid.addWidget(self.fault_undervoltage, 1, 2)
-        fault_grid.addWidget(self.fault_drv, 3, 0)
-        fault_grid.addWidget(self.fault_aux, 3, 1)
-        for spacer_row in (0, 2, 4):
-            fault_grid.setRowStretch(spacer_row, 1)
+        fault_outer.addStretch(1)
+        first_row = QHBoxLayout()
+        first_row.setSpacing(theme.SP_XS)
+        for fault in (
+            self.fault_overtemp,
+            self.fault_overcurrent,
+            self.fault_undervoltage,
+        ):
+            first_row.addWidget(fault, 1, Qt.AlignmentFlag.AlignVCenter)
+        fault_outer.addLayout(first_row)
+        second_row = QHBoxLayout()
+        second_row.setSpacing(theme.SP_XS)
+        second_row.addWidget(self.fault_drv, 1, Qt.AlignmentFlag.AlignVCenter)
+        second_row.addWidget(self.fault_aux, 1, Qt.AlignmentFlag.AlignVCenter)
+        second_row.addStretch(1)
+        fault_outer.addLayout(second_row)
+        fault_outer.addStretch(1)
 
         outer.addWidget(self.fault_region, theme.CARD_LOWER_REGION_STRETCH)
 
