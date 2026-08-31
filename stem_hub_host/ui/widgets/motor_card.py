@@ -484,10 +484,19 @@ class _ModeButton(QPushButton):
             bg_bottom = QColor(theme.BG_BASE)
             border_color = QColor(theme.BORDER)
             text_color = QColor(theme.FG_DISABLED)
-        elif self.underMouse() and not self.isChecked():
-            bg_top = QColor(theme.BG_CARD_HOVER).lighter(112)
-            bg_bottom = QColor(theme.BG_CARD_HOVER)
-            border_color = QColor(theme.ACCENT_HOVER)
+        elif self.isDown():
+            # 按下: 表面明显压暗产生下陷感, 边框用按钮自身语义色 (不再统一青)
+            bg_top = bg_top.darker(145)
+            bg_bottom = bg_bottom.darker(160)
+            border_color = QColor(self._color)
+        elif self.underMouse():
+            if self.isChecked():
+                border_color = QColor(self._color).lighter(125)
+            else:
+                # 悬浮: 边框用所属分组的语义色提亮, 与按钮含义一致 (不再统一青)
+                bg_top = QColor(theme.BG_CARD_HOVER).lighter(112)
+                bg_bottom = QColor(theme.BG_CARD_HOVER)
+                border_color = QColor(group_color).lighter(130)
 
         background = QLinearGradient(0, sq.top(), 0, sq.bottom())
         background.setColorAt(0.0, bg_top)
@@ -524,11 +533,6 @@ class _ModeButton(QPushButton):
         p.setFont(f_lbl)
         p.setPen(QColor(text_color))
         p.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, self._key)
-
-        if self.isDown():
-            overlay = QColor("#FFFFFF")
-            overlay.setAlpha(theme.EFFECT_PRESSED_ALPHA)
-            p.fillPath(path, overlay)
 
         if self.hasFocus():
             focus_path = QPainterPath()

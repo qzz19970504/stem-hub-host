@@ -187,6 +187,53 @@ def test_motor_buttons_opt_into_hover_rendering(qapp: QApplication) -> None:
     qapp.processEvents()
 
 
+def test_motor_button_press_state_darkens_surface(qapp: QApplication) -> None:
+    """按下态必须有压陷反馈: 表面整体变暗, 而不是无感的白色叠加层."""
+    card = MotorCard()
+    card.setFixedWidth(480)
+    card.set_enabled(True)
+    card.show()
+    qapp.processEvents()
+
+    stop_btn = card.buttons["STOP"]
+    assert stop_btn.isEnabled()
+    stop_btn.setChecked(False)
+
+    def mean_brightness(image) -> float:
+        total = 0.0
+        count = 0
+        for x in range(0, image.width(), 3):
+            for y in range(0, image.height(), 3):
+                total += image.pixelColor(x, y).lightness()
+                count += 1
+        return total / count
+
+    idle_mean = mean_brightness(stop_btn.grab().toImage())
+    stop_btn.setDown(True)
+    qapp.processEvents()
+    pressed_mean = mean_brightness(stop_btn.grab().toImage())
+    stop_btn.setDown(False)
+
+    assert pressed_mean < idle_mean - 1
+    card.deleteLater()
+    qapp.processEvents()
+
+
+def test_channel_chip_stylesheet_binds_channel_color(qapp: QApplication) -> None:
+    """chip 的选中高亮与焦点环都必须用通道曲线色, 不能残留全局青蓝."""
+    plot_tab = PlotTab(DataBuffer())
+
+    for name, checkbox in plot_tab.plot_widget._channel_checks.items():
+        color, _ = DataBuffer.CHANNELS[name]
+        sheet = checkbox.styleSheet()
+        assert f"color: {color};" in sheet
+        assert f"border-color: {color};" in sheet
+        assert f"{theme.FOCUS_BORDER_WIDTH}px solid {color};" in sheet
+
+    plot_tab.deleteLater()
+    qapp.processEvents()
+
+
 @pytest.mark.parametrize("object_name", ["primary", "allOffButton"])
 def test_named_action_buttons_render_visibly_dim_when_disabled(
     qapp: QApplication,

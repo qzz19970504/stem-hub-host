@@ -72,8 +72,8 @@ class PlotWidget(QFrame):
             cb = QCheckBox(f"{name.replace('_', ' ').upper()}")
             cb.setObjectName("channelChip")
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
-            # 选中态用通道曲线色描边/着色, chip 即图例.
-            cb.setStyleSheet(self._chip_checked_style(color))
+            # 选中态/焦点环用通道曲线色描边/着色, chip 即图例.
+            cb.setStyleSheet(self._chip_state_style(color))
             cb.setChecked(name == "batt_v")  # 默认只显示电压
             cb.toggled.connect(self._on_channel_toggled)
             self._channel_checks[name] = cb
@@ -128,8 +128,12 @@ class PlotWidget(QFrame):
                 break
 
     @staticmethod
-    def _chip_checked_style(color: str) -> str:
-        """选中 chip 的曲线色高亮样式 (背景为低透明度同色)."""
+    def _chip_state_style(color: str) -> str:
+        """chip 的曲线色样式: 选中高亮 + 焦点环同色.
+
+        焦点环用通道色覆盖应用级 QSS 的青蓝 ACCENT, 避免点击后
+        取消选中仍残留青蓝描边、与通道色不符的问题.
+        """
         tinted = QColor(color)
         return (
             "QCheckBox#channelChip:checked {"
@@ -137,6 +141,9 @@ class PlotWidget(QFrame):
             f" border-color: {color};"
             f" background-color: rgba({tinted.red()}, {tinted.green()}, "
             f"{tinted.blue()}, 34);"
+            "}"
+            "QCheckBox#channelChip:focus {"
+            f" border: {theme.FOCUS_BORDER_WIDTH}px solid {color};"
             "}"
         )
 
