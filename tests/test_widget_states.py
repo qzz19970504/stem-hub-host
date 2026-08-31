@@ -255,6 +255,36 @@ def test_motor_button_hover_border_uses_semantic_color(
     qapp.processEvents()
 
 
+def test_plot_widget_skips_redraw_without_new_samples(qapp: QApplication) -> None:
+    """无新样本时 update_from_buffer 不得重绘 — 保护按钮响应不被空转重绘阻塞."""
+    buffer = DataBuffer()
+    plot_tab = PlotTab(buffer)
+    plot = plot_tab.plot_widget
+    plot.set_channels(("batt_v",))
+
+    calls: list[str] = []
+    original_redraw = plot._redraw_channel
+
+    def spy(name: str) -> None:
+        calls.append(name)
+        original_redraw(name)
+
+    plot._redraw_channel = spy
+
+    plot.update_from_buffer()  # 空 buffer 首次 → 允许一次同步 (画空曲线)
+    first_pass = len(calls)
+    for _ in range(5):
+        plot.update_from_buffer()  # 无新数据 → 不应再重绘
+    assert len(calls) == first_pass
+
+    buffer.series["batt_v"].append(1.0, 36.0)
+    plot.update_from_buffer()  # 新样本 → 重绘一次
+    assert len(calls) == first_pass + 1
+
+    plot_tab.deleteLater()
+    qapp.processEvents()
+
+
 def test_channel_chip_stylesheet_binds_channel_color(qapp: QApplication) -> None:
     """chip 的选中高亮与焦点环都必须用通道曲线色, 不能残留全局青蓝."""
     plot_tab = PlotTab(DataBuffer())

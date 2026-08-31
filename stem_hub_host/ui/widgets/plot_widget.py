@@ -51,6 +51,9 @@ class PlotWidget(QFrame):
         self._compact = compact
         self._curves: dict[str, pg.PlotDataItem] = {}
         self._visible: set[str] = set()
+        # buffer 指纹 (样本数, 最新时间戳): 无新数据时跳过重绘,
+        # 避免 100ms UI 定时器反复 setData/setXRange 阻塞事件循环、拖慢按钮响应.
+        self._last_signature: tuple[int, float] | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8 if compact else 14, 6 if compact else 12, 8 if compact else 14, 8 if compact else 12)
@@ -184,8 +187,21 @@ class PlotWidget(QFrame):
             if cb.isChecked():
                 self._show_channel(name)
 
+    def _buffer_signature(self) -> tuple[int, float]:
+        total = 0
+        latest = 0.0
+        for s in self._buffer.series.values():
+            total += len(s.times)
+            if s.times and s.times[-1] > latest:
+                latest = s.times[-1]
+        return (total, latest)
+
     def update_from_buffer(self) -> None:
-        """重画所有可见曲线 (从 buffer 读)."""
+        """重画所有可见曲线 (从 buffer 读) — 仅在有新样本时执行."""
+        signature = self._buffer_signature()
+        if signature == self._last_signature:
+            return
+        self._last_signature = signature
         for name in list(self._visible):
             self._redraw_channel(name)
 
@@ -214,6 +230,7 @@ class PlotWidget(QFrame):
     def reset(self) -> None:
         """清空数据 + 重画."""
         self._buffer.reset()
+        self._last_signature = None
         self.update_from_buffer()
 
     def refresh_theme(self) -> None:
