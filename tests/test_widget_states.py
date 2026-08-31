@@ -219,6 +219,42 @@ def test_motor_button_press_state_darkens_surface(qapp: QApplication) -> None:
     qapp.processEvents()
 
 
+def test_motor_button_hover_border_uses_semantic_color(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """悬浮边框必须用分组语义色 (safety=红), 不能统一青蓝."""
+    card = MotorCard()
+    card.setFixedWidth(480)
+    card.set_enabled(True)
+    card.show()
+    qapp.processEvents()
+
+    stop_btn = card.buttons["STOP"]
+    stop_btn.setChecked(False)
+    monkeypatch.setattr(stop_btn, "underMouse", lambda: True)
+    stop_btn.update()
+    qapp.processEvents()
+
+    image = stop_btn.grab().toImage()
+    # 方形面从 widget 边缘内缩 4px, 采样左边框中点与面内一点做对照.
+    border_pixel = image.pixelColor(4, image.height() // 2)
+
+    def rgb_dist(a: QColor, b: QColor) -> int:
+        return (
+            abs(a.red() - b.red())
+            + abs(a.green() - b.green())
+            + abs(a.blue() - b.blue())
+        )
+
+    cyan = QColor(theme.ACCENT_HOVER)
+    assert border_pixel.red() > border_pixel.green() + 30
+    assert border_pixel.red() > border_pixel.blue() + 30
+    assert rgb_dist(border_pixel, cyan) > 150
+    card.deleteLater()
+    qapp.processEvents()
+
+
 def test_channel_chip_stylesheet_binds_channel_color(qapp: QApplication) -> None:
     """chip 的选中高亮与焦点环都必须用通道曲线色, 不能残留全局青蓝."""
     plot_tab = PlotTab(DataBuffer())
