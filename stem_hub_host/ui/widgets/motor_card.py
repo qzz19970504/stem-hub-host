@@ -167,20 +167,20 @@ class _ModeBadge(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._mode: str | None = None
-        self.setMinimumHeight(96)
+        self.setMinimumHeight(130)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
         self._apply_surface(theme.BORDER, active=False)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(18, 4, 18, 4)
-        lay.setSpacing(14)
+        lay.setContentsMargins(28, 8, 28, 8)
+        lay.setSpacing(24)
         lay.addStretch(1)
 
         self._label = QLabel("MODE:")
         f_lbl = QFont(theme.FONT_DISPLAY)
-        f_lbl.setPointSize(24)
+        f_lbl.setPointSize(40)
         f_lbl.setBold(True)
         self._label.setFont(f_lbl)
         self._label.setStyleSheet(
@@ -190,7 +190,7 @@ class _ModeBadge(QFrame):
 
         self._value = QLabel("----")
         f_val = QFont(theme.FONT_DISPLAY)
-        f_val.setPointSize(30)
+        f_val.setPointSize(48)
         f_val.setBold(True)
         self._value.setFont(f_val)
         self._value.setStyleSheet(
@@ -262,7 +262,7 @@ class _CurrentBadge(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._ma: int | None = None
-        self.setMinimumHeight(96)
+        self.setMinimumHeight(72)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
@@ -283,7 +283,7 @@ class _CurrentBadge(QFrame):
 
         self._label = QLabel("CURRENT:")
         f_lbl = QFont(theme.FONT_DISPLAY)
-        f_lbl.setPointSize(18)
+        f_lbl.setPointSize(20)
         f_lbl.setBold(True)
         self._label.setFont(f_lbl)
         self._label.setStyleSheet(
@@ -293,7 +293,7 @@ class _CurrentBadge(QFrame):
 
         self._value = QLabel("--.- A")
         f_val = QFont(theme.FONT_MONO)
-        f_val.setPointSize(22)
+        f_val.setPointSize(26)
         f_val.setBold(True)
         self._value.setFont(f_val)
         self._value.setStyleSheet(
@@ -604,18 +604,17 @@ class MotorCard(QFrame):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
-        # 方向二: MODE + CURRENT 合并为一条水平状态栏, 按钮行成为主体.
-        content_layout = QHBoxLayout(self.upper_content)
+        content_layout = QVBoxLayout(self.upper_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(theme.MOTOR_STATUS_GAP)
 
         self.mode_badge = _ModeBadge(self)
-        content_layout.addWidget(self.mode_badge, 1, Qt.AlignmentFlag.AlignVCenter)
+        content_layout.addWidget(self.mode_badge, 2)
 
         self.current_badge = _CurrentBadge(self)
         self.bypass_toggle = self.current_badge.bypass_toggle
         self.bypass_toggle.toggled.connect(self.bypass_changed)
-        content_layout.addWidget(self.current_badge, 1, Qt.AlignmentFlag.AlignVCenter)
+        content_layout.addWidget(self.current_badge, 1)
 
         upper_layout.addWidget(self.upper_content)
         outer.addWidget(self.upper_region, theme.CARD_UPPER_REGION_STRETCH)

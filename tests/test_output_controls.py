@@ -13,7 +13,6 @@ from stem_hub_host.controller import Controller
 from stem_hub_host.models import FaultState, MotorState, OutputState, SenseData
 from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
-from stem_hub_host.ui import theme
 from stem_hub_host.ui.main_window import MainWindow
 from stem_hub_host.ui.widgets.charge_mode_card import ChargeModeCard
 from stem_hub_host.ui.widgets.motor_card import MotorCard
@@ -124,7 +123,7 @@ def test_output_switches_and_labels_are_fully_contained(
             assert widget.sizeHint().width() <= widget.width()
 
 
-def test_motor_status_bar_places_badges_side_by_side(
+def test_motor_status_bands_use_equal_vertical_spacing(
     qapp: QApplication,
 ) -> None:
     card = MotorCard()
@@ -132,26 +131,17 @@ def test_motor_status_bar_places_badges_side_by_side(
     card.show()
     qapp.processEvents()
 
-    mode_center_y = card.mode_badge.mapTo(
-        card, card.mode_badge.rect().center()
+    mode_bottom = card.mode_badge.mapTo(card, card.mode_badge.rect().bottomLeft()).y()
+    current_top = card.current_badge.mapTo(card, card.current_badge.rect().topLeft()).y()
+    current_bottom = card.current_badge.mapTo(
+        card, card.current_badge.rect().bottomLeft()
     ).y()
-    current_center_y = card.current_badge.mapTo(
-        card, card.current_badge.rect().center()
-    ).y()
-    assert abs(mode_center_y - current_center_y) <= 2
-
-    gap = (
-        card.current_badge.mapTo(card, card.current_badge.rect().topLeft()).x()
-        - card.mode_badge.mapTo(card, card.mode_badge.rect().topRight()).x()
-    )
-    assert theme.MOTOR_STATUS_GAP - 2 <= gap <= theme.MOTOR_STATUS_GAP + 2
-
-    assert card.mode_badge.height() == card.current_badge.height()
     divider_top = card.divider.mapTo(card, card.divider.rect().topLeft()).y()
-    badge_bottom = card.mode_badge.mapTo(
-        card, card.mode_badge.rect().bottomLeft()
-    ).y()
-    assert badge_bottom < divider_top
+
+    mode_to_status = current_top - mode_bottom
+    status_to_divider = divider_top - current_bottom
+    assert abs(mode_to_status - status_to_divider) <= 2
+    assert 14 <= mode_to_status <= 16
 
     card.close()
     card.deleteLater()
