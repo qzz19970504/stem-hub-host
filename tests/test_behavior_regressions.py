@@ -207,11 +207,11 @@ def test_passthrough_text_adds_crlf_and_counts_only_after_confirmation() -> None
     panel._on_send()
 
     assert bytes(sent.at(0)[0]) == b"hello\r\n"
-    assert panel.tx_count_label.text() == "TX: 0 字节"
+    assert panel.tx_count_label.text() == "TX: 0 bytes"
     assert panel.tx_edit.toPlainText() == "hello"
 
     panel.confirm_tx_sent(len(b"hello\r\n"))
-    assert panel.tx_count_label.text() == "TX: 7 字节"
+    assert panel.tx_count_label.text() == "TX: 7 bytes"
     assert panel.tx_edit.toPlainText() == ""
 
 

@@ -146,7 +146,7 @@ class AtConsole(QFrame):
     def _create_log_context_menu(self) -> QMenu:
         menu = self.log_view.createStandardContextMenu()
         menu.addSeparator()
-        clear_action = menu.addAction("清除全部")
+        clear_action = menu.addAction("Clear All")
         clear_action.triggered.connect(self.clear_log)
         return menu
 

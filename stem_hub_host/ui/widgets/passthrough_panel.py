@@ -140,8 +140,8 @@ class PassthroughPanel(QFrame):
 
         self.tx_edit = QPlainTextEdit()
         self.tx_edit.setPlaceholderText(
-            "文本模式: 直接输入文本, 自动补 CRLF\n"
-            "Hex 模式: 输入 AA BB CC DD ..."
+            "Text mode: type text, CRLF is appended automatically\n"
+            "Hex mode: enter AA BB CC DD ..."
         )
         self.tx_edit.setMinimumHeight(240)
         tx_col.addWidget(self.tx_edit)
@@ -158,7 +158,7 @@ class PassthroughPanel(QFrame):
         tx_btn_row.addWidget(self.clear_tx_btn)
         tx_btn_row.addStretch(1)
 
-        self.tx_count_label = QLabel("TX: 0 字节")
+        self.tx_count_label = QLabel("TX: 0 bytes")
         self.tx_count_label.setObjectName("secondary")
         tx_btn_row.addSpacing(12)
         tx_btn_row.addWidget(self.tx_count_label)
@@ -197,7 +197,7 @@ class PassthroughPanel(QFrame):
         # RX panel footer
         bottom = QHBoxLayout()
         rx_col.addLayout(bottom)
-        self.rx_count_label = QLabel("RX: 0 字节")
+        self.rx_count_label = QLabel("RX: 0 bytes")
         self.rx_count_label.setObjectName("secondary")
         bottom.addWidget(self.rx_count_label)
         bottom.addStretch(1)
@@ -212,7 +212,7 @@ class PassthroughPanel(QFrame):
         self._rx_buffer.extend(data)
         self._rx_bytes += len(data)
         self._refresh_rx_view()
-        self.rx_count_label.setText(f"RX: {self._rx_bytes} 字节")
+        self.rx_count_label.setText(f"RX: {self._rx_bytes} bytes")
 
     def reset(self) -> None:
         self._tx_bytes = 0
@@ -236,9 +236,11 @@ class PassthroughPanel(QFrame):
 
     def _on_hex_mode_toggled(self, hex_mode: bool) -> None:
         if hex_mode:
-            self.tx_edit.setPlaceholderText("Hex 模式: AA BB CC DD ...（按原字节发送）")
+            self.tx_edit.setPlaceholderText(
+                "Hex mode: AA BB CC DD ... (sent as raw bytes)"
+            )
         else:
-            self.tx_edit.setPlaceholderText("文本模式: 直接输入文本")
+            self.tx_edit.setPlaceholderText("Text mode: type text")
 
     def _on_send(self) -> None:
         text = self.tx_edit.toPlainText()
@@ -310,5 +312,5 @@ class PassthroughPanel(QFrame):
         self._refresh_rx_view()
 
     def _refresh_count(self) -> None:
-        self.tx_count_label.setText(f"TX: {self._tx_bytes} 字节")
-        self.rx_count_label.setText(f"RX: {self._rx_bytes} 字节")
+        self.tx_count_label.setText(f"TX: {self._tx_bytes} bytes")
+        self.rx_count_label.setText(f"RX: {self._rx_bytes} bytes")

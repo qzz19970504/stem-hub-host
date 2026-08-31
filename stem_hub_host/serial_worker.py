@@ -105,7 +105,7 @@ class SerialWorker(QObject):
             self.close()
         if not self._transport.open(port_name, baudrate):
             self.error_occurred.emit(
-                f"打开串口失败: {self._transport.error_string()}"
+                f"Failed to open serial port: {self._transport.error_string()}"
             )
             return False
         self._is_open = True
@@ -136,10 +136,12 @@ class SerialWorker(QObject):
     def send_bytes(self, data: bytes) -> None:
         """Write an exact byte sequence without text transcoding."""
         if not self._is_open:
-            raise SerialError("串口未打开")
+            raise SerialError("Serial port is not open")
         n = self._transport.write(data)
         if n != len(data):
-            raise SerialError(f"串口写入不完整: 写了 {n}/{len(data)}")
+            raise SerialError(
+                f"Incomplete serial write: sent {n}/{len(data)} bytes"
+            )
 
     def send_command(self, cmd: str, timeout_ms: int = 1000) -> None:
         """Queue an AT command so its eventual OK/ERROR keeps attribution."""
@@ -211,7 +213,7 @@ class SerialWorker(QObject):
 
         if "response" in captured:
             return captured["response"]
-        raise SerialTimeout(f"等待响应超时 ({timeout_ms}ms): {cmd!r}")
+        raise SerialTimeout(f"Response timeout ({timeout_ms}ms): {cmd!r}")
 
     # ---- 内部 ----
     def _on_ready_read(self) -> None:
@@ -234,7 +236,7 @@ class SerialWorker(QObject):
 
     def _on_port_error(self) -> None:
         # transport 端已经过滤 NoError, 这里只管发错误消息
-        self.error_occurred.emit(f"串口错误: {self._transport.error_string()}")
+        self.error_occurred.emit(f"Serial error: {self._transport.error_string()}")
 
     def _handle_line(self, line: str, raw_line: bytes | None = None) -> None:
         resp = ParsedResponse.parse(line)
@@ -281,7 +283,7 @@ class SerialWorker(QObject):
             try:
                 self._start_next_pending()
             except SerialError as error:
-                self.error_occurred.emit(f"串口发送队列失败: {error}")
+                self.error_occurred.emit(f"Failed to queue serial write: {error}")
                 self.close()
         elif (
             resp.sense
@@ -296,9 +298,9 @@ class SerialWorker(QObject):
 
     def _ensure_command_can_be_sent(self) -> None:
         if not self._is_open:
-            raise SerialError("串口未打开")
+            raise SerialError("Serial port is not open")
         if self._is_resynchronizing:
-            raise SerialError("串口协议正在重新同步")
+            raise SerialError("Serial protocol is resynchronizing")
 
     def _start_next_pending(self) -> None:
         if not self._pending:
@@ -336,7 +338,7 @@ class SerialWorker(QObject):
                 pending.timeout_callback()
 
         self.error_occurred.emit(
-            "命令响应超时，串口保持连接并等待重新同步: "
+            "Command response timeout, link kept open and resynchronizing: "
             f"{timed_out_command!r}"
         )
         for pending in abandoned:

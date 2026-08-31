@@ -12,7 +12,7 @@
     {
       "id": "dark:fixed:console:connected",
       "file": "dark/fixed-console-connected.png",
-      "sha256": "ad8a090086228e9ed851f3ef858040b42af2afc41879d15f0f71e8c0544172df",
+      "sha256": "b920eb2aebf06c1d9842d0f73c30b07d54962337ad5213995371141425cd095f",
       "width": 1600,
       "height": 900,
       "theme": "dark",
@@ -24,7 +24,7 @@
     {
       "id": "dark:fixed:charts:connected",
       "file": "dark/fixed-charts-connected.png",
-      "sha256": "88d2d2b4ae517e60d6992c04fbc34da4721fe601d1d96edca4b84a045f88b9f2",
+      "sha256": "63bdf671b375ab2f35d58aaa819dfa0ef03e0c8475b073f501dde192a83036d4",
       "width": 1600,
       "height": 900,
       "theme": "dark",
@@ -36,7 +36,7 @@
     {
       "id": "dark:fixed:passthrough:connected",
       "file": "dark/fixed-passthrough-connected.png",
-      "sha256": "438a692c21ab8cfe64394e7ce5a803af14ad41f0d32065e5d273957bf646e1a6",
+      "sha256": "0114fb302e3e0487b95c38ba54b4971370e7deec06bbe73e04c19602a3b675a2",
       "width": 1600,
       "height": 900,
       "theme": "dark",
@@ -60,7 +60,7 @@
     {
       "id": "dark:fullscreen:console:connected",
       "file": "dark/fullscreen-console-connected.png",
-      "sha256": "410798dea4316db0b5885bfbbd40e62084c13c14b9bdb5fc8d498ad1b6918db4",
+      "sha256": "c3b868105608c2c2541712b1522191bd7c58486dac0524381d8bb7802987c350",
       "width": 1920,
       "height": 1080,
       "theme": "dark",
@@ -72,7 +72,7 @@
     {
       "id": "dark:fullscreen:charts:connected",
       "file": "dark/fullscreen-charts-connected.png",
-      "sha256": "8e9753eb4ac0ef49024d0deec3a59ce5e996e2fb23a8773e8419970441abeba4",
+      "sha256": "960062cedcbe6b21bbd7932a56fb81b4af5a9426c1bcd721394687bfac0a2694",
       "width": 1920,
       "height": 1080,
       "theme": "dark",
@@ -84,7 +84,7 @@
     {
       "id": "dark:fullscreen:passthrough:connected",
       "file": "dark/fullscreen-passthrough-connected.png",
-      "sha256": "c9aca5ec358b4c5b1f59e4852abc8cba3172f4f74b0d86eb2f470c9d63d464c9",
+      "sha256": "8992bec24f11bcba61ca62222b32c6616057238b9e8460326d5380ad85b0a159",
       "width": 1920,
       "height": 1080,
       "theme": "dark",
@@ -108,7 +108,7 @@
     {
       "id": "light:fixed:console:connected",
       "file": "light/fixed-console-connected.png",
-      "sha256": "61d1a099a55b639efea96f44bf431ed4a7ece0460ad6b5bf8f645615a3958a47",
+      "sha256": "8aa4c5264b8c5f040908ffcc8c16f8608c45840631a4d60c893e795193dd2ec2",
       "width": 1600,
       "height": 900,
       "theme": "light",
@@ -120,7 +120,7 @@
     {
       "id": "light:fixed:charts:connected",
       "file": "light/fixed-charts-connected.png",
-      "sha256": "c7c073ec0952d7afc51712b0a3527ca85aed26084eeef3b05102f5a248531222",
+      "sha256": "444adbe128754a4a327ea875655b6c6abf58a2410aed06863bae41c59e075b66",
       "width": 1600,
       "height": 900,
       "theme": "light",
@@ -132,7 +132,7 @@
     {
       "id": "light:fixed:passthrough:connected",
       "file": "light/fixed-passthrough-connected.png",
-      "sha256": "3d38c5f3330e951ad72dc021607c52b06a54d844af2bd1d460ecdb142443efa1",
+      "sha256": "afce3a278267f4de4e56ec4a081cb237c65e53d5b87683f0b216a465d22e857d",
       "width": 1600,
       "height": 900,
       "theme": "light",
@@ -156,7 +156,7 @@
     {
       "id": "light:fullscreen:console:connected",
       "file": "light/fullscreen-console-connected.png",
-      "sha256": "4e6a453d6e0b58f2dafeba7914644151d8692301899cecf4eb6d8b4f53c25a44",
+      "sha256": "980646a01506f7dd9945978b10f404f619bda29f096e14660a245c2e310be2c5",
       "width": 1920,
       "height": 1080,
       "theme": "light",
@@ -168,7 +168,7 @@
     {
       "id": "light:fullscreen:charts:connected",
       "file": "light/fullscreen-charts-connected.png",
-      "sha256": "66547cb53b10714054f8e30dca4b87456e41abae1625d5ff6f75639dfbbc1343",
+      "sha256": "d158dcdab245dce5e3e6ca14ff263beb73ba1350fe6e4fad26360f1e2098c900",
       "width": 1920,
       "height": 1080,
       "theme": "light",
@@ -180,7 +180,7 @@
     {
       "id": "light:fullscreen:passthrough:connected",
       "file": "light/fullscreen-passthrough-connected.png",
-      "sha256": "61d9da9fb60751af56de07215015dabdc0a5da3587e9a3d0c34c4acc971434b3",
+      "sha256": "b9651d032e9d5b36197df7048060ad39ff29796d029b70605b359d33a7731415",
       "width": 1920,
       "height": 1080,
       "theme": "light",

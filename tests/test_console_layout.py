@@ -164,7 +164,7 @@ def test_at_console_context_menu_offers_clear_all(
     console = AtConsole()
     menu = console._create_log_context_menu()
 
-    assert "清除全部" in [action.text() for action in menu.actions()]
+    assert "Clear All" in [action.text() for action in menu.actions()]
     menu.deleteLater()
     console.deleteLater()
     qapp.processEvents()

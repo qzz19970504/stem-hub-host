@@ -349,8 +349,9 @@ class MainWindow(QMainWindow):
             self.console_tab.at_console.append_error(f"Open failed: {port}")
             QMessageBox.warning(
                 self,
-                "连接失败",
-                f"无法打开串口 {port}。\n\n请检查端口是否被占用后重试。",
+                "Connection Failed",
+                f"Unable to open serial port {port}.\n\n"
+                "Check that the port is not in use and try again.",
             )
 
     def _on_close_serial(self) -> None:
@@ -390,13 +391,14 @@ class MainWindow(QMainWindow):
 
     def _on_handshake_failed(self, reason: str) -> None:
         self._apply_handshake_gate(connected=False)
-        self.console_tab.at_console.append_error(f"连接失败: {reason}")
+        self.console_tab.at_console.append_error(f"Connection failed: {reason}")
         QMessageBox.warning(
             self,
-            "连接失败",
-            "串口已打开，但未能在 5 秒内完成设备握手。\n"
-            f"原因：{reason}\n\n"
-            "请检查端口、波特率和下位机状态后重试。",
+            "Connection Failed",
+            "Serial port opened, but the device handshake did not complete "
+            "within 5 seconds.\n"
+            f"Reason: {reason}\n\n"
+            "Check the port, baud rate and firmware state and try again.",
         )
 
     def _on_toggle_changed(self, name: str, on: bool) -> None:
