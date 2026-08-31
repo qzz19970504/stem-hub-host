@@ -67,17 +67,20 @@ def _button_config(key: str) -> dict[str, str]:
 # ---- 自绘图标 ----
 
 def _draw_power_standby(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+    """电源待机 — 核心与 WAKE 内部弧线同尺寸 (0.66r), 整排重量协调."""
     p.save()
-    pen = QPen(QColor(color), max(2, r * 0.18), Qt.PenStyle.SolidLine,
+    pen = QPen(QColor(color), max(2, r * 0.16), Qt.PenStyle.SolidLine,
                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawArc(QRectF(cx - r, cy - r * 0.72, r * 2, r * 2), 35 * 16, 290 * 16)
-    p.drawLine(QPointF(cx, cy - r), QPointF(cx, cy + r * 0.05))
+    p.drawArc(QRectF(cx - r * 0.66, cy - r * 0.48, r * 1.32, r * 1.32),
+              35 * 16, 290 * 16)
+    p.drawLine(QPointF(cx, cy - r * 0.72), QPointF(cx, cy + r * 0.02))
     p.restore()
 
 
 def _draw_power_active(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+    """电源唤醒 — 光芒内缘留白, 与核心弧线保持呼吸感."""
     p.save()
     pen = QPen(QColor(color), max(2, r * 0.16), Qt.PenStyle.SolidLine,
                Qt.PenCapStyle.RoundCap)
@@ -88,10 +91,10 @@ def _draw_power_active(p: QPainter, cx: float, cy: float, r: float, color: str) 
     p.drawLine(QPointF(cx, cy - r * 0.72), QPointF(cx, cy + r * 0.02))
     for i in range(6):
         ang = math.pi + i * math.pi / 5
-        x1 = cx + math.cos(ang) * r * 0.88
-        y1 = cy + math.sin(ang) * r * 0.88
-        x2 = cx + math.cos(ang) * r * 1.08
-        y2 = cy + math.sin(ang) * r * 1.08
+        x1 = cx + math.cos(ang) * r * 0.94
+        y1 = cy + math.sin(ang) * r * 0.94
+        x2 = cx + math.cos(ang) * r * 1.10
+        y2 = cy + math.sin(ang) * r * 1.10
         p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
     p.restore()
 
@@ -133,25 +136,27 @@ def _draw_arrow_down(p: QPainter, cx: float, cy: float, r: float, color: str) ->
 
 
 def _draw_brake_disc(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+    """刹车盘 + 卡钳 — 盘体加大至 0.72r, 与整排重量一致."""
     p.save()
-    pen = QPen(QColor(color), max(2, r * 0.15), Qt.PenStyle.SolidLine,
+    pen = QPen(QColor(color), max(2, r * 0.16), Qt.PenStyle.SolidLine,
                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawEllipse(QPointF(cx - r * 0.12, cy), r * 0.68, r * 0.68)
-    p.drawEllipse(QPointF(cx - r * 0.12, cy), r * 0.13, r * 0.13)
-    p.drawArc(QRectF(cx + r * 0.15, cy - r * 0.82, r * 0.78, r * 1.64),
+    p.drawEllipse(QPointF(cx - r * 0.12, cy), r * 0.72, r * 0.72)
+    p.drawEllipse(QPointF(cx - r * 0.12, cy), r * 0.14, r * 0.14)
+    p.drawArc(QRectF(cx + r * 0.13, cy - r * 0.84, r * 0.80, r * 1.68),
               75 * 16, -150 * 16)
     p.restore()
 
 
 def _draw_stop_square(p: QPainter, cx: float, cy: float, r: float, color: str) -> None:
+    """急停方块 — 收缩至 1.08r + 圆角略增, 与整排重量平衡."""
     p.save()
-    s = r * 1.25
+    s = r * 1.08
     p.setPen(QPen(QColor(color), max(2, r * 0.16), Qt.PenStyle.SolidLine,
                   Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawRoundedRect(QRectF(cx - s / 2, cy - s / 2, s, s), r * 0.14, r * 0.14)
+    p.drawRoundedRect(QRectF(cx - s / 2, cy - s / 2, s, s), r * 0.18, r * 0.18)
     p.restore()
 
 
