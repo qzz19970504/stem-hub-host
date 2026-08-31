@@ -226,7 +226,7 @@ class Controller(QObject):
         try:
             self._worker.send_command(cmd_set_motor(mode))
         except SerialError as e:
-            self._on_worker_error(f"电机命令失败: {e}")
+            self._on_worker_error(f"Motor command failed: {e}")
 
     def set_nmos(self, idx: int, on: bool) -> None:
         self._send_output(cmd_set_nmos(idx, on), f"NMOS{idx}", on)
@@ -399,7 +399,7 @@ class Controller(QObject):
             self.output_command_failed.emit(control, on, str(e))
             if on_failure is not None:
                 on_failure(str(e))
-            self._on_worker_error(f"{control} 命令失败: {e}")
+            self._on_worker_error(f"{control} command failed: {e}")
 
     def set_passthrough(self, mode: str) -> None:
         """mode: 'uart2' / 'uart3' / 'both' / 'off'."""
@@ -425,7 +425,7 @@ class Controller(QObject):
 
         def revert(reason: str) -> None:
             self._apply_passthrough_mode(previous)
-            self._on_worker_error(f"透传命令失败: {reason}")
+            self._on_worker_error(f"Passthrough command failed: {reason}")
             self._finish_passthrough_transition()
 
         def confirm() -> None:
@@ -434,7 +434,7 @@ class Controller(QObject):
 
         def enable_failed(reason: str) -> None:
             self._apply_passthrough_mode("off")
-            self._on_worker_error(f"透传命令失败: {reason}")
+            self._on_worker_error(f"Passthrough command failed: {reason}")
             self._finish_passthrough_transition()
 
         if mode == "uart2":
@@ -518,7 +518,7 @@ class Controller(QObject):
         except SerialError as error:
             self._passthrough_tx_active = None
             self._passthrough_tx_queue.clear()
-            self._on_worker_error(f"透传发送失败: {error}")
+            self._on_worker_error(f"Passthrough send failed: {error}")
 
     def send_raw(self, cmd: str) -> None:
         """AT 输入框直接发, 不等回包."""
@@ -527,7 +527,7 @@ class Controller(QObject):
         try:
             self._worker.send_command(cmd)
         except SerialError as e:
-            self._on_worker_error(f"AT 发送失败: {e}")
+            self._on_worker_error(f"AT send failed: {e}")
 
     def _standard_commands_available(self) -> bool:
         return (
@@ -593,7 +593,7 @@ class Controller(QObject):
             self._passthrough_tx_active = None
             if resp.error is not None:
                 self._passthrough_tx_queue.clear()
-                self._on_worker_error(f"透传发送失败: {resp.error.code}")
+                self._on_worker_error(f"Passthrough send failed: {resp.error.code}")
             else:
                 self.passthrough_tx_confirmed.emit(byte_count)
                 self._send_next_passthrough_chunk()
@@ -625,7 +625,7 @@ class Controller(QObject):
             try:
                 self._worker.send_command(cmd_query_output())
             except SerialError as error:
-                self._on_worker_error(f"输出状态确认失败: {error}")
+                self._on_worker_error(f"Output state confirmation failed: {error}")
 
         bridge_pending = self._pending_bridges.get(cmd)
         if bridge_pending:

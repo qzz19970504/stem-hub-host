@@ -16,7 +16,7 @@ from typing import Iterable, Optional
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -72,6 +72,8 @@ class PlotWidget(QFrame):
             cb = QCheckBox(f"{name.replace('_', ' ').upper()}")
             cb.setObjectName("channelChip")
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            # 选中态用通道曲线色描边/着色, chip 即图例.
+            cb.setStyleSheet(self._chip_checked_style(color))
             cb.setChecked(name == "batt_v")  # 默认只显示电压
             cb.toggled.connect(self._on_channel_toggled)
             self._channel_checks[name] = cb
@@ -83,10 +85,11 @@ class PlotWidget(QFrame):
         self._plot.setBackground(theme.BG_PLOT)
         self._plot.setMouseEnabled(x=True, y=False)  # 横向缩放, 纵向固定
         self._plot.showGrid(x=True, y=True, alpha=0.16)
-        self._plot.setLabel("left", "VALUE")
         self._plot.setLabel("bottom", "TIME", units="s")
+        self._plot.setDefaultPadding(0.08)  # 自动量程上下留白, 曲线不贴边
         self._plot.disableAutoRange(axis="x")
         self._apply_time_range()
+        self._refresh_axis_label()
         for axis_name in ("bottom", "left"):
             axis = self._plot.getAxis(axis_name)
             axis.setPen(pg.mkPen(theme.BORDER_LIGHT))
@@ -124,6 +127,30 @@ class PlotWidget(QFrame):
                     self._hide_channel(name)
                 break
 
+    @staticmethod
+    def _chip_checked_style(color: str) -> str:
+        """选中 chip 的曲线色高亮样式 (背景为低透明度同色)."""
+        tinted = QColor(color)
+        return (
+            "QCheckBox#channelChip:checked {"
+            f" color: {color};"
+            f" border-color: {color};"
+            f" background-color: rgba({tinted.red()}, {tinted.green()}, "
+            f"{tinted.blue()}, 34);"
+            "}"
+        )
+
+    def _refresh_axis_label(self) -> None:
+        """可见通道单位一致时把单位标到 Y 轴, 否则回退泛化标签."""
+        units = {
+            DataBuffer.CHANNELS[name][1]
+            for name in self._visible
+        }
+        if len(units) == 1:
+            self._plot.setLabel("left", "VALUE", units=next(iter(units)))
+        else:
+            self._plot.setLabel("left", "VALUE")
+
     def _show_channel(self, name: str) -> None:
         if name in self._visible:
             return
@@ -132,6 +159,7 @@ class PlotWidget(QFrame):
         curve = self._plot.plot([], [], pen=pen, name=name)
         self._curves[name] = curve
         self._visible.add(name)
+        self._refresh_axis_label()
         self._redraw_channel(name)
 
     def _hide_channel(self, name: str) -> None:
@@ -140,6 +168,7 @@ class PlotWidget(QFrame):
         self._plot.removeItem(self._curves[name])
         del self._curves[name]
         self._visible.discard(name)
+        self._refresh_axis_label()
 
     def _rebuild_curves(self) -> None:
         for name in list(self._curves.keys()):

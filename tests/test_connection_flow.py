@@ -193,8 +193,8 @@ def test_handshake_failure_is_offline_before_single_dialog(
     QTest.qWait(280)
 
     assert len(warnings) == 1
-    assert warnings[0][0] == "连接失败"
-    assert "5 秒" in warnings[0][1]
+    assert warnings[0][0] == "Connection Failed"
+    assert "5 seconds" in warnings[0][1]
     assert not worker.is_open()
     window.close()
     app.processEvents()
@@ -224,8 +224,9 @@ def test_direct_open_failure_restores_offline_and_warns_once(
     assert bar.port_combo.isEnabled()
     assert warnings == [
         (
-            "连接失败",
-            "无法打开串口 COM_BAD。\n\n请检查端口是否被占用后重试。",
+            "Connection Failed",
+            "Unable to open serial port COM_BAD.\n\n"
+            "Check that the port is not in use and try again.",
         )
     ]
     window.close()

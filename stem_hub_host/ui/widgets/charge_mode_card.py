@@ -317,17 +317,17 @@ class ChargeModeCard(QFrame):
         undervoltage: bool | None = None,
     ) -> None:
         if drv is not None:
-            state = "error" if drv else "ok"
+            state = "error" if drv else "off"
             self.fault_drv.set_state(state)
         if aux is not None:
-            state = "error" if aux else "ok"
+            state = "error" if aux else "off"
             self.fault_aux.set_state(state)
         if overtemp is not None:
-            self.fault_overtemp.set_state("error" if overtemp else "ok")
+            self.fault_overtemp.set_state("error" if overtemp else "off")
         if overcurrent is not None:
-            self.fault_overcurrent.set_state("error" if overcurrent else "ok")
+            self.fault_overcurrent.set_state("error" if overcurrent else "off")
         if undervoltage is not None:
-            self.fault_undervoltage.set_state("error" if undervoltage else "ok")
+            self.fault_undervoltage.set_state("error" if undervoltage else "off")
 
     def clear_all(self) -> None:
         self.clear_controls()

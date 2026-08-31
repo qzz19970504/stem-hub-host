@@ -346,7 +346,7 @@ def test_sensor_and_fault_data_drive_honest_indicators(
     assert card.fault_overcurrent.state == "error"
     assert card.fault_undervoltage.state == "error"
     assert card.fault_drv.state == "error"
-    assert card.fault_aux.state == "ok"
+    assert card.fault_aux.state == "off"
 
 
 def test_confirmed_output_state_drives_switches_and_child_gates(
