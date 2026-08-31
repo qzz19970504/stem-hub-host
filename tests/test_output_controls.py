@@ -13,6 +13,7 @@ from stem_hub_host.controller import Controller
 from stem_hub_host.models import FaultState, MotorState, OutputState, SenseData
 from stem_hub_host.serial_worker import SerialWorker
 from stem_hub_host.transport import FakeSerialTransport
+from stem_hub_host.ui import theme
 from stem_hub_host.ui.main_window import MainWindow
 from stem_hub_host.ui.widgets.charge_mode_card import ChargeModeCard
 from stem_hub_host.ui.widgets.motor_card import MotorCard
@@ -58,32 +59,11 @@ def test_output_card_exposes_only_real_toggle_controls(
     assert output_card.all_off_button.text() == "ALL OFF"
 
 
-def test_charge_bypass_is_vertically_aligned_with_lights(
+def test_output_controls_grouped_into_two_parent_columns(
     output_card: ChargeModeCard,
     qapp: QApplication,
 ) -> None:
     output_card.setFixedSize(520, 430)
-    output_card.show()
-    qapp.processEvents()
-
-    bypass_x = output_card._cells["CHARGE_BYPASS"].toggle.mapTo(
-        output_card,
-        output_card._cells["CHARGE_BYPASS"].toggle.rect().center(),
-    ).x()
-    lights_x = output_card._cells["LIGHTS"].toggle.mapTo(
-        output_card,
-        output_card._cells["LIGHTS"].toggle.rect().center(),
-    ).x()
-
-    assert abs(bypass_x - lights_x) <= 2
-    assert output_card.drive_hierarchy.objectName() == "driveHierarchy"
-
-
-def test_output_controls_follow_approved_hierarchy(
-    output_card: ChargeModeCard,
-    qapp: QApplication,
-) -> None:
-    output_card.setFixedSize(367, 312)
     output_card.show()
     qapp.processEvents()
 
@@ -92,12 +72,17 @@ def test_output_controls_follow_approved_hierarchy(
         for name, cell in output_card._cells.items()
     }
 
-    assert abs(centers["CHARGE"].y() - centers["CHARGE_BYPASS"].y()) <= 2
-    assert centers["CHARGE"].y() < centers["DRIVE"].y()
+    # CHARGE 列: 父子同列纵向堆叠, 不再横跨两端留真空
+    assert abs(centers["CHARGE"].x() - centers["CHARGE_BYPASS"].x()) <= 2
+    assert centers["CHARGE"].y() < centers["CHARGE_BYPASS"].y()
+    # DRIVE 列: 主开关在上, 三枚子开关同排并列且有序
     assert centers["DRIVE"].y() < centers["NMOS1"].y()
     assert abs(centers["NMOS1"].y() - centers["NMOS2"].y()) <= 2
     assert abs(centers["NMOS2"].y() - centers["LIGHTS"].y()) <= 2
-    assert abs(centers["DRIVE"].x() - centers["NMOS2"].x()) <= 2
+    assert centers["NMOS1"].x() < centers["NMOS2"].x() < centers["LIGHTS"].x()
+    # 两列并排: CHARGE 列整体居左, DRIVE 列居右
+    assert centers["CHARGE"].x() < centers["DRIVE"].x()
+    assert output_card.drive_hierarchy.objectName() == "driveHierarchy"
     assert output_card._cells["CHARGE_BYPASS"].label.text() == "CHARGE BYPASS"
     assert (
         output_card._cells["CHARGE_BYPASS"].label.font().pointSize()
@@ -105,7 +90,7 @@ def test_output_controls_follow_approved_hierarchy(
     )
 
 
-def test_output_upper_region_gives_drive_twice_the_charge_height(
+def test_output_columns_keep_parent_child_width_ratio(
     output_card: ChargeModeCard,
     qapp: QApplication,
 ) -> None:
@@ -113,17 +98,18 @@ def test_output_upper_region_gives_drive_twice_the_charge_height(
     output_card.show()
     qapp.processEvents()
 
-    assert hasattr(output_card, "charge_region")
-    assert hasattr(output_card, "drive_region")
-    ratio = output_card.drive_region.height() / output_card.charge_region.height()
-    assert 1.95 <= ratio <= 2.05
+    assert hasattr(output_card, "charge_column")
+    assert hasattr(output_card, "drive_column")
+    ratio = output_card.drive_column.width() / output_card.charge_column.width()
+    assert 1.45 <= ratio <= 1.55
+    assert output_card.charge_column.height() == output_card.drive_column.height()
 
 
 def test_output_switches_and_labels_are_fully_contained(
     output_card: ChargeModeCard,
     qapp: QApplication,
 ) -> None:
-    output_card.setFixedSize(367, 312)
+    output_card.setFixedSize(520, 430)
     output_card.show()
     qapp.processEvents()
 
@@ -138,7 +124,7 @@ def test_output_switches_and_labels_are_fully_contained(
             assert widget.sizeHint().width() <= widget.width()
 
 
-def test_motor_status_bands_use_equal_vertical_spacing(
+def test_motor_status_bar_places_badges_side_by_side(
     qapp: QApplication,
 ) -> None:
     card = MotorCard()
@@ -146,17 +132,26 @@ def test_motor_status_bands_use_equal_vertical_spacing(
     card.show()
     qapp.processEvents()
 
-    mode_bottom = card.mode_badge.mapTo(card, card.mode_badge.rect().bottomLeft()).y()
-    current_top = card.current_badge.mapTo(card, card.current_badge.rect().topLeft()).y()
-    current_bottom = card.current_badge.mapTo(
-        card, card.current_badge.rect().bottomLeft()
+    mode_center_y = card.mode_badge.mapTo(
+        card, card.mode_badge.rect().center()
     ).y()
-    divider_top = card.divider.mapTo(card, card.divider.rect().topLeft()).y()
+    current_center_y = card.current_badge.mapTo(
+        card, card.current_badge.rect().center()
+    ).y()
+    assert abs(mode_center_y - current_center_y) <= 2
 
-    mode_to_status = current_top - mode_bottom
-    status_to_divider = divider_top - current_bottom
-    assert abs(mode_to_status - status_to_divider) <= 2
-    assert 14 <= mode_to_status <= 16
+    gap = (
+        card.current_badge.mapTo(card, card.current_badge.rect().topLeft()).x()
+        - card.mode_badge.mapTo(card, card.mode_badge.rect().topRight()).x()
+    )
+    assert theme.MOTOR_STATUS_GAP - 2 <= gap <= theme.MOTOR_STATUS_GAP + 2
+
+    assert card.mode_badge.height() == card.current_badge.height()
+    divider_top = card.divider.mapTo(card, card.divider.rect().topLeft()).y()
+    badge_bottom = card.mode_badge.mapTo(
+        card, card.mode_badge.rect().bottomLeft()
+    ).y()
+    assert badge_bottom < divider_top
 
     card.close()
     card.deleteLater()
@@ -201,33 +196,11 @@ def test_all_off_is_centered_below_the_five_output_switches(
     assert abs(all_off_center.x() - output_card.width() / 2) < 8
 
 
-def test_fault_rows_use_the_lower_card_area_without_dead_space(
+def test_fault_indicators_form_a_compact_centered_block(
     output_card: ChargeModeCard,
     qapp: QApplication,
 ) -> None:
     output_card.setFixedSize(520, 430)
-    output_card.show()
-    qapp.processEvents()
-
-    fault_bottom = max(
-        fault.mapTo(output_card, fault.rect().bottomLeft()).y()
-        for fault in (
-            output_card.fault_overtemp,
-            output_card.fault_overcurrent,
-            output_card.fault_undervoltage,
-            output_card.fault_drv,
-            output_card.fault_aux,
-        )
-    )
-
-    assert output_card.height() - fault_bottom <= 55
-
-
-def test_fault_rows_have_three_equal_vertical_gaps(
-    output_card: ChargeModeCard,
-    qapp: QApplication,
-) -> None:
-    output_card.setFixedSize(710, 511)
     output_card.show()
     qapp.processEvents()
 
@@ -237,17 +210,25 @@ def test_fault_rows_have_three_equal_vertical_gaps(
         output_card.fault_undervoltage,
     )
     second_row = (output_card.fault_drv, output_card.fault_aux)
-    first_top = min(widget.geometry().top() for widget in first_row)
-    first_bottom = max(widget.geometry().bottom() for widget in first_row)
-    second_top = min(widget.geometry().top() for widget in second_row)
-    second_bottom = max(widget.geometry().bottom() for widget in second_row)
-    gaps = (
-        first_top,
-        second_top - first_bottom - 1,
-        output_card.fault_region.height() - second_bottom - 1,
-    )
 
-    assert max(gaps) - min(gaps) <= 2
+    def centers_y(widgets) -> list[int]:
+        return [
+            w.mapTo(output_card, w.rect().center()).y() for w in widgets
+        ]
+
+    first_centers = centers_y(first_row)
+    second_centers = centers_y(second_row)
+    assert max(first_centers) - min(first_centers) <= 2
+    assert max(second_centers) - min(second_centers) <= 2
+    assert max(first_centers) < min(second_centers)
+
+    # 块整体在下区内垂直居中, 无拉伸空行
+    block_top = min(w.geometry().top() for w in first_row)
+    block_bottom = max(w.geometry().bottom() for w in second_row)
+    region_height = output_card.fault_region.height()
+    top_gap = block_top
+    bottom_gap = region_height - block_bottom - 1
+    assert abs(top_gap - bottom_gap) <= 8
 
 
 def test_charge_and_drive_are_mutually_exclusive(

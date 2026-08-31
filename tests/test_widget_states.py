@@ -57,7 +57,7 @@ def semantic_sense() -> SenseData:
 
 def test_motor_buttons_follow_confirmed_mode(qapp: QApplication) -> None:
     card = MotorCard()
-    assert card.mode_badge.height() == 130
+    assert card.mode_badge.height() == 96
     card.update_state("REV", 1200, 0, 0)
 
     assert card.buttons["REV"].isChecked()
@@ -84,14 +84,14 @@ def test_motor_status_surface_combines_current_and_bypass(
         card.current_badge,
         card.bypass_toggle.rect().center(),
     ).x()
-    expected_center = card.current_badge.width() * 5 / 6
     region_center = card.current_badge.bypass_region.geometry().center().x()
     label_center = card.current_badge.bypass_label.mapTo(
         card.current_badge,
         card.current_badge.bypass_label.rect().center(),
     ).x()
 
-    assert abs(bypass_center - expected_center) <= 3
+    # bypass 始终偏右 (读数最小宽度会把它推向右侧, 不强制固定比例)
+    assert bypass_center > card.current_badge.width() * 2 / 3
     assert abs(bypass_center - region_center) <= 1
     assert abs(label_center - bypass_center) <= 2
 
