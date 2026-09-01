@@ -1,0 +1,80 @@
+// stem-hub-host 模块依赖关系图（当前架构，证据支撑）
+// 实线箭头 = 直接代码依赖（import / 信号连接），置信度 high
+// 虚线箭头 = 运行时数据流方向，置信度 high（均有代码证据）
+// 颜色分层：外部=灰 / UI=蓝 / 控制=绿 / 通信=橙 / 数据=紫 / 装配=黄
+digraph stem_hub_host {
+  rankdir=TB;
+  splines=true;
+  fontname="Consolas";
+  node [fontname="Consolas", fontsize=11, style="filled,rounded", shape=box, fillcolor=white];
+  edge [fontname="Consolas", fontsize=9];
+
+  // ---- 外部 ----
+  user [label="Operator\n用户/调试人员", shape=ellipse, fillcolor="#eeeeee"];
+  hw_port [label="串口设备 (COM)", shape=cylinder, fillcolor="#eeeeee"];
+  firmware [label="STM32 固件 (release-v3.3)", shape=cylinder, fillcolor="#eeeeee"];
+
+  // ---- 装配 ----
+  main [label="main.py\n程序入口 / --fake 装配", fillcolor="#fff2cc"];
+  app [label="app.py\nQApplication 单例 + 字体", fillcolor="#fff2cc"];
+
+  // ---- UI ----
+  mw [label="MainWindow\n(main_window.py)\n信号绑定 / 握手门禁 / 100ms 刷新", fillcolor="#dae8fc"];
+  tab1 [label="ConsoleTab (tab1_console.py)\n电池卡 + 6 温度卡 + 输出卡 + 电机卡 + AT 控制台", fillcolor="#dae8fc"];
+  tab2 [label="PlotTab (tab2_plot.py)\n频率可调实时图表", fillcolor="#dae8fc"];
+  tab3 [label="PassthroughTab (tab3_passthrough.py)\nUART 桥接 + 收发面板", fillcolor="#dae8fc"];
+  widgets [label="ui/widgets/ (13 个)\nserial_bar / battery_card / temp_grid /\ncharge_mode_card / motor_card / at_console /\nplot_widget / passthrough_panel ...", fillcolor="#dae8fc"];
+  theme [label="视觉与主题 (ui/)\ntheme.py + style.qss + stylesheet.py\nfonts.py + native_chrome.py", fillcolor="#e1d5e7"];
+
+  // ---- 控制 ----
+  ctrl [label="Controller (controller.py)\n握手状态机 / 周期轮询 / 电源路径串行化 /\n透传桥接 + TX 确认队列", fillcolor="#d5e8d4"];
+  buf [label="DataBuffer (data_buffer.py)\n180s 滚动环形缓冲, 8 通道", fillcolor="#e1d5e7"];
+
+  // ---- 通信 ----
+  worker [label="SerialWorker (serial_worker.py)\nFIFO 命令队列 / 行切分 / 响应归属 /\n超时重同步 (200ms 静默)", fillcolor="#ffe6cc"];
+  proto [label="at_protocol.py\ncmd_* 构造 / LineSplitter / ParsedResponse", fillcolor="#ffe6cc"];
+  models [label="models.py\nSenseData / OutputState / MotorState /\nFaultState / DiagInfo / UartRxFrame", fillcolor="#ffe6cc"];
+  transport [label="transport.py\nTransport 抽象 + Real / Fake 实现", fillcolor="#ffe6cc"];
+  fake [label="FakeFirmware (fake_firmware.py)\n模拟握手/遥测/输出/电机", fillcolor="#ffe6cc"];
+
+  // ---- 装配关系 ----
+  main -> app [label="get_app()"];
+  main -> worker [label="构造"];
+  main -> ctrl [label="构造"];
+  main -> mw [label="构造"];
+  main -> fake [label="--fake 时构造", style=dashed, color=gray50];
+
+  // ---- UI 组合 ----
+  mw -> tab1; mw -> tab2; mw -> tab3;
+  tab1 -> widgets; tab2 -> widgets; tab3 -> widgets;
+  mw -> theme [label="set_color_scheme / QSS"];
+  app -> theme [label="加载字体"];
+
+  // ---- UI <-> Controller ----
+  mw -> ctrl [label="用户操作: open / set_motor /\nset_charge_mode / set_passthrough"];
+  ctrl -> mw [label="Qt Signal: handshake_failed /\noutput_command_failed / error_occurred ...", color="#0066cc", style=dashed];
+  widgets -> ctrl [label="UI Signal (经 MainWindow 绑定)", color="#0066cc", style=dashed];
+
+  // ---- Controller <-> Worker ----
+  ctrl -> worker [label="send_command / send_and_wait"];
+  worker -> ctrl [label="response_received /\nat_data_received / uart_rx_received", color="#0066cc", style=dashed];
+
+  // ---- Worker 内部依赖 ----
+  worker -> proto [label="LineSplitter / ParsedResponse"];
+  worker -> models [label="AtError"];
+  worker -> transport [label="持有 Transport"];
+  proto -> models [label="parse 各类响应"];
+  transport -> hw_port [label="QSerialPort 读写"];
+
+  // ---- 数据流 ----
+  ctrl -> buf [label="feed_sense()", color="#7c3aed", style=dashed];
+  buf -> tab2 [label="update_from_buffer()\n(经 MainWindow 100ms 刷新)", color="#7c3aed", style=dashed];
+  buf -> tab1 [label="构造时注入", color="#7c3aed", style=dashed];
+
+  // ---- 假固件回路 ----
+  fake -> transport [label="feed() 喂入模拟响应", color=gray50];
+  fake -> worker [label="监听写出的字节", color=gray50];
+
+  // ---- 与固件的关系（经由硬件）----
+  hw_port -> firmware [label="UART1 9600 8N1\nAT \\r\\n 文本", dir=both];
+}
